@@ -1,0 +1,67 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: helm-server
+  namespace: helm-ns
+spec:
+  selector:
+    app: helm-server
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 8081
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: helm-server
+  namespace: helm-ns
+  labels:
+    app: helm-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: helm-server
+  template:
+    metadata:
+      labels:
+        app: helm-server
+    spec:
+      serviceAccountName: helm-server-sa
+      containers:
+      - name: helm-server
+        image: 172.22.11.2:30500/helm-server:test
+        imagePullPolicy: Always
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+     app: helm-server
+  name: helm-server-sa
+  namespace: helm-ns
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: helm-server-role
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: helm-server-rb
+subjects:
+- kind: ServiceAccount
+  name: helm-server-sa
+  namespace: helm-ns
+roleRef:
+  kind: ClusterRole
+  name: helm-server-role
+  apiGroup: rbac.authorization.k8s.io

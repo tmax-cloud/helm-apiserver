@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+     app: helm-server-test
+  name: helm-server-test-sa
+  namespace: helm-ns
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: helm-server-test-role
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: helm-server-test-rb
+subjects:
+- kind: ServiceAccount
+  name: helm-server-test-sa
+  namespace: helm-ns
+roleRef:
+  kind: ClusterRole
+  name: helm-server-test-role
+  apiGroup: rbac.authorization.k8s.io
