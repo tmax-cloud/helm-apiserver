@@ -9,6 +9,11 @@ import (
 	"k8s.io/klog"
 )
 
+const (
+	releasePrefix = "/release"
+	chartPrefix   = "/chart"
+)
+
 func main() {
 	klog.Infoln("initializing server....")
 
@@ -19,9 +24,10 @@ func main() {
 	// 	panic(err)
 	// }
 
-	router.HandleFunc("/helm", apis.InstallRelease).Methods("POST", "PUT")
-	router.HandleFunc("/helm", apis.UnInstallRelease).Methods("DELETE")
-	router.HandleFunc("/helm", apis.RollbackRelease).Methods("PATCH")
+	router.HandleFunc(releasePrefix, apis.InstallRelease).Methods("POST", "PUT")
+	router.HandleFunc(releasePrefix, apis.UnInstallRelease).Methods("DELETE")
+	router.HandleFunc(releasePrefix, apis.RollbackRelease).Methods("PATCH")
+	router.HandleFunc(chartPrefix, apis.AddChartRepo).Methods("GET")
 
 	http.Handle("/", router)
 
