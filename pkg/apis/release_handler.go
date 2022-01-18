@@ -11,6 +11,9 @@ import (
 	helmclient "github.com/mittwald/go-helm-client"
 )
 
+// [TODO] : 구현
+func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request)
+
 func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("UnInstallRelease")
 	req := schemas.ReleaseRequest{}
@@ -19,17 +22,13 @@ func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	chartSpec := helmclient.ChartSpec{
-		ReleaseName: req.Spec.ReleaseName,
-		ChartName:   req.Spec.Repository,
+	releaseSpec := helmclient.ChartSpec{
+		ReleaseName: req.ReleaseName,
 		Namespace:   req.Namespace,
-		ValuesYaml:  req.Values,
-		Version:     req.Spec.Version,
-		UpgradeCRDs: true,
-		Wait:        false,
 	}
 
-	if err := hcm.Hc.UninstallRelease(&chartSpec); err != nil {
+	// [TODO] : Namespace check는 안하는지?
+	if err := hcm.Hc.UninstallReleaseByName(releaseSpec.ReleaseName); err != nil {
 		klog.Errorln(err, "failed to uninstall chart")
 	}
 

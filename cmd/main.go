@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	releasePrefix = "/release"
-	chartPrefix   = "/chart"
+	releasePrefix = "/releases/{release-name}"
+	chartPrefix   = "/charts/{chart-name}"
+	repoPrefix    = "/repos/{repo-name}"
 
 	repositoryCache  = "/tmp/.helmcache" // 캐시 디렉토리. 특정 chart-repo에 해당하는 chart 이름 리스트 txt파일과, 해당 repo의 index.yaml 파일이 저장됨
 	repositoryConfig = "/tmp/.helmrepo"  // 현재 add된 repo들 저장. go helm client 버그. 무조건 /tmp/.helmrepo 에다가 저장됨.
@@ -29,10 +30,15 @@ func main() {
 	// Create HelmClientManager
 	hcm := apis.HelmClientManager{Hc: newHelmClient()}
 
-	router.HandleFunc(releasePrefix, hcm.InstallRelease).Methods("POST", "PUT")
-	router.HandleFunc(releasePrefix, hcm.UnInstallRelease).Methods("DELETE")
-	router.HandleFunc(releasePrefix, hcm.RollbackRelease).Methods("PATCH")
-	router.HandleFunc(chartPrefix, hcm.AddChartRepo).Methods("POST")
+	router.HandleFunc(chartPrefix, hcm.GetCharts).Methods("GET") // 설치 가능한 chart list 반환
+	// (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
+	router.HandleFunc(chartPrefix, hcm.InstallChart).Methods("POST") // charts instance 생성
+
+	router.HandleFunc(releasePrefix, hcm.GetReleases).Methods("GET")         // 설치된 release list 반환 (path-variable : 특정 release 정보 반환) helm client deployed releaselist 활용
+	router.HandleFunc(releasePrefix, hcm.UnInstallRelease).Methods("DELETE") // 설치된 release 전부 삭제 (path-variable : 특정 release 삭제)
+
+	router.HandleFunc(releasePrefix, hcm.RollbackRelease).Methods("PATCH") // 일단 미사용 (update / rollback)
+	router.HandleFunc(repoPrefix, hcm.AddChartRepo).Methods("POST")
 
 	http.Handle("/", router)
 
