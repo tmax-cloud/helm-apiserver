@@ -12,7 +12,9 @@ import (
 )
 
 // [TODO] : 구현
-func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request)
+func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) {
+
+}
 
 func (hcm *HelmClientManager) InstallChart(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("InstallRelease")
