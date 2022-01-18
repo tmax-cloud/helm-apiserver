@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: helm-server
+  namespace: helm-ns
+  labels:
+    app: helm-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: helm-server
+  template:
+    metadata:
+      labels:
+        app: helm-server
+    spec:
+      serviceAccountName: helm-server-sa
+      containers:
+      - name: helm-server
+        image: 172.22.11.2:30500/helm-server:yjh # TODO : 수정 필요
+        imagePullPolicy: Always
+        volumeMounts:
+          - name: helm-server-data
+            mountPath: /tmp # .helmrepo 버그 때문에 임시 경로 지정
+      volumes:
+        - name: helm-server-data
+          persistentVolumeClaim:
+            claimName: helm-server-pvc
