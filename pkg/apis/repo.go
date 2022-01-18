@@ -4,46 +4,35 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 	"k8s.io/klog"
 )
 
-func AddChartRepo(w http.ResponseWriter, r *http.Request) {
+type ChartRepository struct {
+	Name string `json:"name"`
+	URL  string `json:"repoURL"`
+}
 
-	req := schemas.ReleaseRequest{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Request) {
+	klog.Infoln("AddChartRepo")
+	cr := ChartRepository{}
+	if err := json.NewDecoder(r.Body).Decode(&cr); err != nil {
 		klog.Errorln(err, "failed to decode request")
 		return
 	}
 
+	// TODO : Private Repository도 지원해줘야 함
 	chartRepo := repo.Entry{
-		Name: "test",
-		URL:  req.Spec.Repository,
+		Name: cr.Name,
+		URL:  cr.URL,
 	}
 
-	settings := cli.New()
-	repository, _ := repo.NewChartRepository(&chartRepo, getter.All(settings))
-	idxPath, err := repository.DownloadIndexFile()
-	if idxPath == "" {
-		klog.Errorln(err, "failed to get index file")
-	}
-
-	index, _ := repo.LoadIndexFile(idxPath)
-
-	// for test
-	for _, entry := range index.Entries {
-		for _, chartversion := range entry {
-			klog.Infoln("Chart Name :" + chartversion.Name)
-			klog.Infoln(chartversion)
-		}
+	if err := hcm.Hc.AddOrUpdateChartRepo(chartRepo); err != nil {
+		klog.Errorln(err, "failed to add chart repo")
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(""); err != nil {
+	if err := json.NewEncoder(w).Encode("OK : Add chart repo"); err != nil {
 		klog.Errorln(err, "failed to encode response")
 	}
-
 }
