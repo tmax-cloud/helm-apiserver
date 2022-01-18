@@ -12,7 +12,9 @@ import (
 )
 
 // [TODO] : 구현
-func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request)
+func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request) {
+
+}
 
 func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("UnInstallRelease")
