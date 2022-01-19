@@ -5,10 +5,10 @@ import (
 )
 
 type ReleaseRequest struct {
-	ReleaseName string `json:"releasename"`
-	Namespace   string `json:"namespace"`
+	ReleaseName string `json:"releasename,omitempty"`
+	Namespace   string `json:"namespace,omitempty"`
 }
 
 type ReleaseResponse struct {
-	Release release.Release `json:"release"`
+	Release []release.Release `json:"release,omitempty"`
 }
