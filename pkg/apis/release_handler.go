@@ -9,23 +9,30 @@ import (
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 
 	"k8s.io/klog"
-
-	helmclient "github.com/mittwald/go-helm-client"
 )
 
-// [TODO] : fail response 도 만들어야 함
 func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("GetRelease")
 	w.Header().Set("Content-Type", "application/json")
 	req := schemas.ReleaseRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		klog.Errorln(err, "failed to decode request")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while decoding request",
+		})
 		return
 	}
 
+	hcm.SetClientNS(req.Namespace)
 	releases, err := hcm.Hc.ListDeployedReleases()
 	if err != nil {
-		klog.Errorln(err, "failed to decode request")
+		klog.Errorln(err, "failed to get helm release list")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while getting helm release list",
+		})
+		return
 	}
 
 	response := &schemas.ReleaseResponse{}
@@ -38,43 +45,49 @@ func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			klog.Errorln(err, "failed to encode response")
-		}
+		respond(w, http.StatusOK, response)
+		return
 	}
 
 	for _, rel := range releases {
 		response.Release = append(response.Release, *rel)
 	}
 
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		klog.Errorln(err, "failed to encode response")
-	}
-
+	respond(w, http.StatusOK, response)
 }
 
 func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("UnInstallRelease")
+	w.Header().Set("Content-Type", "application/json")
 	req := schemas.ReleaseRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		klog.Errorln(err, "failed to decode request")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while decoding request",
+		})
 		return
 	}
 
-	releaseSpec := helmclient.ChartSpec{
-		ReleaseName: req.ReleaseName,
-		Namespace:   req.Namespace,
-	}
+	vars := mux.Vars(r)
+	reqReleaseName := vars["release-name"]
 
-	// [TODO] : Namespace check는 안하는지?
-	if err := hcm.Hc.UninstallReleaseByName(releaseSpec.ReleaseName); err != nil {
+	hcm.SetClientNS(req.Namespace)
+	if err := hcm.Hc.UninstallReleaseByName(reqReleaseName); err != nil {
 		klog.Errorln(err, "failed to uninstall chart")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while uninstalling helm release",
+		})
+		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(""); err != nil {
-		klog.Errorln(err, "failed to encode response")
+	respond(w, http.StatusOK, "")
+}
+
+func respond(w http.ResponseWriter, statusCode int, body interface{}) {
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		klog.Errorln(err, "Error occurs while encoding response body")
 	}
 }
