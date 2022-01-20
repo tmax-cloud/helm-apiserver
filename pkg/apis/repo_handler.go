@@ -160,6 +160,7 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// [TODO] : File open 먼저 해야되는지 check 필요
 	// Remove charts.txt file
 	if err := os.Remove(repositoryCache + "/" + reqRepoName + chartsFileSuffix); err != nil {
 		klog.Errorln(err, "failed to remove charts.txt file")
