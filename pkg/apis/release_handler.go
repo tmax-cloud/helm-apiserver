@@ -83,6 +83,7 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 		Wait:        false,
 	}
 
+	// [TODO] ChartIsInstalled check 해야 하나?
 	if _, err := hcm.Hc.InstallOrUpgradeChart(context.Background(), &chartSpec); err != nil {
 		klog.Errorln(err, "failed to install release")
 		respond(w, http.StatusBadRequest, &schemas.Error{
