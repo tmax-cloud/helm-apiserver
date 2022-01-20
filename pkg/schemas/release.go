@@ -12,3 +12,8 @@ type ReleaseRequest struct {
 type ReleaseResponse struct {
 	Release []release.Release `json:"release,omitempty"`
 }
+
+type Error struct {
+	Error       string `json:"error,omitempty"`
+	Description string `json:"description,omitempty"`
+}

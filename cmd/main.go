@@ -57,7 +57,7 @@ func newHelmClient() helmclient.Client {
 
 	c, _ := client.New(cfg, client.Options{})
 
-	sa, _ := internal.GetServiceAccount(c, types.NamespacedName{Name: "helm-server-sa", Namespace: "helm-ns"})
+	sa, _ := internal.GetServiceAccount(c, types.NamespacedName{Name: "helm-server-test-sa", Namespace: "helm-ns"})
 	var secretName string
 
 	for _, sec := range sa.Secrets {
