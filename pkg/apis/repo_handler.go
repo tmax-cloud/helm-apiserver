@@ -16,6 +16,9 @@ import (
 // const (
 // 	repositoryCache  = "/tmp/.helmcache" // 캐시 디렉토리. 특정 chart-repo에 해당하는 chart 이름 리스트 txt파일과, 해당 repo의 index.yaml 파일이 저장됨
 // 	repositoryConfig = "/tmp/.helmrepo"  // 현재 add된 repo들 저장. go helm client 버그. 무조건 /tmp/.helmrepo 에다가 저장됨.
+
+//  indexFileSuffix  = "-index.yaml"
+// 	chartsFileSuffix = "-charts.txt"
 // )
 
 func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +67,7 @@ func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Reque
 
 	// Read repositoryConfig File which contains repo Info list
 	repoList := &schemas.RepositoryFile{}
-	repoListFile, err := ioutil.ReadFile(repositoryConfig + "/repositories.yaml")
+	repoListFile, err := ioutil.ReadFile(repositoryConfig)
 	if err != nil {
 		klog.Errorln(err, "failed to get repository list file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
@@ -110,7 +113,7 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 
 	// Read repositoryConfig File which contains repo Info list
 	repoList := &schemas.RepositoryFile{}
-	repoListFile, err := ioutil.ReadFile(repositoryConfig + "/repositories.yaml")
+	repoListFile, err := ioutil.ReadFile(repositoryConfig)
 	if err != nil {
 		klog.Errorln(err, "failed to get repository list file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
@@ -148,7 +151,7 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 	}
 
 	// Update repository.yaml file without requested repo
-	if err := ioutil.WriteFile(repositoryConfig+"/repositories.yaml", newRepoListFile, 0644); err != nil {
+	if err := ioutil.WriteFile(repositoryConfig, newRepoListFile, 0644); err != nil {
 		klog.Errorln(err, "failed to write new repo list file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -158,7 +161,7 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 	}
 
 	// Remove charts.txt file
-	if err := os.Remove(repositoryConfig + reqRepoName + "-charts.txt"); err != nil {
+	if err := os.Remove(repositoryCache + "/" + reqRepoName + chartsFileSuffix); err != nil {
 		klog.Errorln(err, "failed to remove charts.txt file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -168,7 +171,7 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 	}
 
 	// Remove index.yaml file
-	if err := os.Remove(repositoryConfig + reqRepoName + "-index.yaml"); err != nil {
+	if err := os.Remove(repositoryCache + "/" + reqRepoName + indexFileSuffix); err != nil {
 		klog.Errorln(err, "failed to remove index.yaml file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
