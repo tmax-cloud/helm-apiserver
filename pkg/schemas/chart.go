@@ -7,13 +7,13 @@ import (
 type ChartRequest struct {
 	Name             string `json:"name"`
 	Namespace        string `json:"namespace"`
-	ChartRequestSpec `json:"chartrequestspec,omitempty"`
+	ChartRequestSpec `json:"chartRequestSpec,omitempty"`
 	Values           string `json:"values,omitempty"`
 }
 
 type ChartRequestSpec struct {
 	PackageURL  string `json:"packageURL"`
-	ReleaseName string `json:"releasename"`
+	ReleaseName string `json:"releaseName"`
 	Version     string `json:"version"`
 }
 
