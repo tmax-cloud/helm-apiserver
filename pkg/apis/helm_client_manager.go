@@ -54,3 +54,6 @@ func (hcm *HelmClientManager) SetClientNS(ns string) {
 
 	hcm.Hc = helmClient
 }
+
+// [TODO]: req.header로 받은 token 값으로 교체 예정
+// func (hcm *HelmClientManager) SetClientToken(ns string) {}

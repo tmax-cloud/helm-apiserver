@@ -82,7 +82,7 @@ func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respond(w, http.StatusOK, "")
+	respond(w, http.StatusOK, reqReleaseName+" is successfully uninstalled")
 }
 
 func respond(w http.ResponseWriter, statusCode int, body interface{}) {

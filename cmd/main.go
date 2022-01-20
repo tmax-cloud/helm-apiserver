@@ -37,9 +37,11 @@ func main() {
 	router.HandleFunc(releasePrefix, hcm.GetReleases).Methods("GET") // 설치된 release list 반환 (path-variable : 특정 release 정보 반환) helm client deployed releaselist 활용
 	router.HandleFunc(releasePrefix+"/{release-name}", hcm.GetReleases).Methods("GET")
 	router.HandleFunc(releasePrefix+"/{release-name}", hcm.UnInstallRelease).Methods("DELETE") // 설치된 release 전부 삭제 (path-variable : 특정 release 삭제)
+	router.HandleFunc(releasePrefix+"/{release-name}", hcm.RollbackRelease).Methods("PATCH")   // 일단 미사용 (update / rollback)
 
-	router.HandleFunc(releasePrefix+"/{release-name}", hcm.RollbackRelease).Methods("PATCH") // 일단 미사용 (update / rollback)
-	router.HandleFunc(repoPrefix, hcm.AddChartRepo).Methods("POST")
+	router.HandleFunc(repoPrefix, hcm.GetChartRepos).Methods("GET")                     // 현재 추가된 Helm repo list 반환
+	router.HandleFunc(repoPrefix, hcm.AddChartRepo).Methods("POST")                     // Helm repo 추가
+	router.HandleFunc(repoPrefix+"/{repo-name}", hcm.DeleteChartRepo).Methods("DELETE") // repo-name의 Repo 삭제 (index.yaml과 )
 
 	http.Handle("/", router)
 
