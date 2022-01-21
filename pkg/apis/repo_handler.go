@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
 	"helm.sh/helm/v3/pkg/repo"
 	"k8s.io/klog"
@@ -77,11 +78,13 @@ func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := json.Unmarshal(repoListFile, repoList); err != nil {
-		klog.Errorln(err, "failed to decode request")
+	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
+
+	if err := json.Unmarshal(repoListFileJson, repoList); err != nil {
+		klog.Errorln(err, "failed to unmarshal repo file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
-			Description: "Error occurs while decoding request",
+			Description: "Error occurs while unmarshalling request",
 		})
 		return
 	}
@@ -96,7 +99,7 @@ func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Reque
 }
 
 func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("Get chartRepos")
+	klog.Infoln("Delete chartRepos")
 	w.Header().Set("Content-Type", "application/json")
 	req := &schemas.RepoRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -123,7 +126,9 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := json.Unmarshal(repoListFile, repoList); err != nil {
+	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
+
+	if err := json.Unmarshal(repoListFileJson, repoList); err != nil {
 		klog.Errorln(err, "failed to unmarshal repo list")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
