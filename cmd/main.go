@@ -30,8 +30,8 @@ func main() {
 	// Create HelmClientManager
 	hcm := apis.HelmClientManager{Hc: newHelmClient()}
 
-	router.HandleFunc(chartPrefix, hcm.GetCharts).Methods("GET")                 // 설치 가능한 chart list 반환
-	router.HandleFunc(chartPrefix+"/{chart-name}", hcm.GetCharts).Methods("GET") // (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
+	router.HandleFunc(chartPrefix, hcm.GetCharts2).Methods("GET")                 // 설치 가능한 chart list 반환
+	router.HandleFunc(chartPrefix+"/{chart-name}", hcm.GetCharts2).Methods("GET") // (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
 
 	router.HandleFunc(releasePrefix, hcm.GetReleases).Methods("GET") // 설치된 release list 반환 (path-variable : 특정 release 정보 반환) helm client deployed releaselist 활용
 	router.HandleFunc(releasePrefix+"/{release-name}", hcm.GetReleases).Methods("GET")

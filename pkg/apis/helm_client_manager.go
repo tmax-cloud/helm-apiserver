@@ -15,7 +15,8 @@ const (
 )
 
 type HelmClientManager struct {
-	Hc helmclient.Client
+	Hc         helmclient.Client
+	HelmClient helmclient.HelmClient
 }
 
 func (hcm *HelmClientManager) SetClientNS(ns string) {

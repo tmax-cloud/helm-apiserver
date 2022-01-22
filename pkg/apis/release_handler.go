@@ -93,7 +93,7 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	respond(w, http.StatusOK, req.ReleaseName+" is successfully installed")
+	respond(w, http.StatusOK, req.ReleaseName+" release is successfully installed")
 }
 
 // 일단 안씀
@@ -131,7 +131,7 @@ func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Req
 		})
 	}
 
-	respond(w, http.StatusOK, reqReleaseName+" is successfully rollbacked")
+	respond(w, http.StatusOK, reqReleaseName+" release is successfully rollbacked")
 }
 
 func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +160,7 @@ func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respond(w, http.StatusOK, reqReleaseName+" is successfully uninstalled")
+	respond(w, http.StatusOK, reqReleaseName+" release is successfully uninstalled")
 }
 
 func respond(w http.ResponseWriter, statusCode int, body interface{}) {

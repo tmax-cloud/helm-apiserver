@@ -4,10 +4,20 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 
+	"github.com/ghodss/yaml"
+	"github.com/gorilla/mux"
 	"k8s.io/klog"
+
+	"helm.sh/helm/v3/pkg/chart"
+	// "helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/repo"
+
+	helmclient "github.com/mittwald/go-helm-client"
+	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 )
 
 // Request는 schemas package에서 일괄 관리하는게 좋을 것 같습니다
@@ -83,4 +93,147 @@ func getChartList(ChartRepoName string) ([]string, error) {
 	}
 
 	return chartList, nil
+}
+
+func (hcm *HelmClientManager) GetCharts2(w http.ResponseWriter, r *http.Request) {
+	klog.Infoln("Get Charts")
+	w.Header().Set("Content-Type", "application/json")
+	req := &schemas.RepoRequest{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		klog.Errorln(err, "failed to decode request")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while decoding request",
+		})
+		return
+	}
+
+	// Read repositoryConfig File which contains repo Info list
+	repoList := &schemas.RepositoryFile{}
+	repoListFile, err := ioutil.ReadFile(repositoryConfig)
+	if err != nil {
+		klog.Errorln(err, "failed to get repository list file")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while reading repository list file",
+		})
+		return
+	}
+
+	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
+
+	if err := json.Unmarshal(repoListFileJson, repoList); err != nil {
+		klog.Errorln(err, "failed to unmarshal repo file")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while unmarshalling request",
+		})
+		return
+	}
+
+	var repoNames []string
+	for _, repository := range repoList.Repositories { // check 필요
+		repoNames = append(repoNames, repository.Name)
+	}
+
+	response := &schemas.ChartResponse{}
+	index := &repo.IndexFile{}
+	responseEntries := make(map[string]repo.ChartVersions)
+
+	// read all index.yaml file and save only Entries
+	for _, repoName := range repoNames {
+		indexFile, err := ioutil.ReadFile(repositoryCache + "/" + repoName + indexFileSuffix)
+		if err != nil {
+			klog.Errorln(err, "failed to read index.yaml file of "+repoName)
+			respond(w, http.StatusBadRequest, &schemas.Error{
+				Error:       err.Error(),
+				Description: "Error occurs while reading index.yaml file of " + repoName,
+			})
+			return
+		}
+
+		indexFileJson, _ := yaml.YAMLToJSON(indexFile) // Should transform yaml to Json
+
+		if err := json.Unmarshal(indexFileJson, index); err != nil {
+			klog.Errorln(err, "failed to unmarshal index file")
+			respond(w, http.StatusBadRequest, &schemas.Error{
+				Error:       err.Error(),
+				Description: "Error occurs while unmarshalling index file",
+			})
+			return
+		}
+
+		for key, value := range index.Entries {
+			responseEntries[key] = value
+		}
+	}
+
+	// in case of {chart-name} is requested
+	vars := mux.Vars(r)
+	reqChartName, exist := vars["chart-name"]
+
+	helmChart := &chart.Chart{}
+	onlyOneEntries := make(map[string]repo.ChartVersions)
+	var chartVersions []*repo.ChartVersion
+	var reqURL string
+	if exist {
+		index.Entries[reqChartName] = responseEntries[reqChartName]
+		for _, chart := range index.Entries[reqChartName] {
+			if chart.Name == reqChartName {
+				chartVersions = append(chartVersions, chart)
+				onlyOneEntries[reqChartName] = chartVersions
+
+				// get reqURL value for value.yaml
+				for _, url := range chart.URLs {
+					reqURL = url
+				}
+			}
+		}
+		index.Entries = onlyOneEntries
+		response.IndexFile = *index
+
+		// helmChart, _ = loader.LoadFile(reqURL)
+		// klog.Infoln(helmChart) // for test -> nil 이라 response에 추가할때 nil pointer 에러남
+		/////////////////// 이부분 ///////////////////
+		// err 처리 추가
+
+		byteChart, err := hcm.Hc.TemplateChart(&helmclient.ChartSpec{
+			ReleaseName: "temp",
+			ChartName:   reqURL,
+			Namespace:   "default",
+		})
+		if err != nil {
+			klog.Infoln(err)
+		}
+		klog.Infoln(string(byteChart))                 // for test
+		helmChartJson, _ := yaml.YAMLToJSON(byteChart) // Should transform yaml to Json
+
+		klog.Infoln("------------------------")
+		klog.Infoln(helmChartJson)
+
+		if err := json.Unmarshal(helmChartJson, helmChart); err != nil {
+			klog.Errorln(err, "failed to unmarshal rendered chart")
+			respond(w, http.StatusBadRequest, &schemas.Error{
+				Error:       err.Error(),
+				Description: "Error occurs while unmarshalling rendered chart",
+			})
+			return
+		}
+		klog.Infoln("------------------------")
+		klog.Infoln(helmChart)
+
+		response.Values = helmChart.Values
+		/////////////////////////////////////////////////
+
+		klog.Infoln("Get Charts of " + reqChartName + " is successfully done")
+		respond(w, http.StatusOK, response)
+		return
+	}
+
+	index.Entries = responseEntries // add all repo's the entries
+	response.IndexFile = *index
+
+	klog.Infoln("Get Charts is successfully done")
+	respond(w, http.StatusOK, response)
+
 }
