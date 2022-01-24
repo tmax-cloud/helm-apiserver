@@ -1,29 +1,21 @@
 package apis
 
 import (
-	"bufio"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 
 	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
 	"k8s.io/klog"
 
+	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
-	// "helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/repo"
 
-	helmclient "github.com/mittwald/go-helm-client"
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 )
-
-// Request는 schemas package에서 일괄 관리하는게 좋을 것 같습니다
-type Request struct {
-	ChartRepositoryName string
-}
 
 const (
 	indexFileSuffix  = "-index.yaml"
@@ -45,57 +37,7 @@ const (
 // category 분류해서 해당 되는 차트의 index 정보만 response로 보내줘야 할 것 같습니다
 // 이건 아직 chart.yaml 에서 category 필드 추가를 안해 놓은 상태라서 일단 보류~
 
-// 설치 가능한 chart list 반환
-// AddChartRepo로 helm-charts 레포를 등록했다고 가정
-// helmcache에서 {chart-repo-name}-index.yaml
-// helmcache에서 {chart-repo-name}-charts.txt
 func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("GetCharts")
-	//req := schemas.ChartRequest{}
-	req := Request{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		return
-	}
-
-	charts, err := getChartList(req.ChartRepositoryName)
-	if err != nil {
-		klog.Errorln(err, "failed to get chart list")
-		return
-	}
-
-	for i, s := range charts {
-		fmt.Println(i, s)
-	}
-}
-
-func getChartList(ChartRepoName string) ([]string, error) {
-	// open the file
-	file, err := os.Open(repositoryCache + "/" + ChartRepoName + chartsFileSuffix)
-
-	defer file.Close()
-
-	//handle errors while opening
-	if err != nil {
-		klog.Errorln(err, "Error when opening file")
-		return nil, err
-	}
-
-	fileScanner := bufio.NewScanner(file)
-
-	var chartList []string
-
-	// read line by line
-	for fileScanner.Scan() {
-		line := fileScanner.Text()
-		chartList = append(chartList, line)
-		fmt.Println(line)
-	}
-
-	return chartList, nil
-}
-
-func (hcm *HelmClientManager) GetCharts2(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get Charts")
 	w.Header().Set("Content-Type", "application/json")
 	req := &schemas.RepoRequest{}
@@ -132,7 +74,7 @@ func (hcm *HelmClientManager) GetCharts2(w http.ResponseWriter, r *http.Request)
 	}
 
 	var repoNames []string
-	for _, repository := range repoList.Repositories { // check 필요
+	for _, repository := range repoList.Repositories {
 		repoNames = append(repoNames, repository.Name)
 	}
 
@@ -172,10 +114,10 @@ func (hcm *HelmClientManager) GetCharts2(w http.ResponseWriter, r *http.Request)
 	vars := mux.Vars(r)
 	reqChartName, exist := vars["chart-name"]
 
-	helmChart := &chart.Chart{}
 	onlyOneEntries := make(map[string]repo.ChartVersions)
 	var chartVersions []*repo.ChartVersion
 	var reqURL string
+
 	if exist {
 		index.Entries[reqChartName] = responseEntries[reqChartName]
 		for _, chart := range index.Entries[reqChartName] {
@@ -192,38 +134,17 @@ func (hcm *HelmClientManager) GetCharts2(w http.ResponseWriter, r *http.Request)
 		index.Entries = onlyOneEntries
 		response.IndexFile = *index
 
-		// helmChart, _ = loader.LoadFile(reqURL)
-		// klog.Infoln(helmChart) // for test -> nil 이라 response에 추가할때 nil pointer 에러남
-		/////////////////// 이부분 ///////////////////
-		// err 처리 추가
+		helmChart, _, _ := hcm.getChart(reqURL, &action.ChartPathOptions{})
 
-		byteChart, err := hcm.Hc.TemplateChart(&helmclient.ChartSpec{
-			ReleaseName: "temp",
-			ChartName:   reqURL,
-			Namespace:   "default",
-		})
-		if err != nil {
-			klog.Infoln(err)
-		}
-		klog.Infoln(string(byteChart))                 // for test
-		helmChartJson, _ := yaml.YAMLToJSON(byteChart) // Should transform yaml to Json
-
-		klog.Infoln("------------------------")
-		klog.Infoln(helmChartJson)
-
-		if err := json.Unmarshal(helmChartJson, helmChart); err != nil {
-			klog.Errorln(err, "failed to unmarshal rendered chart")
+		if helmChart == nil {
+			klog.Errorln(err, "failed to get chart: "+reqURL+" info")
 			respond(w, http.StatusBadRequest, &schemas.Error{
 				Error:       err.Error(),
-				Description: "Error occurs while unmarshalling rendered chart",
+				Description: "Error occurs while getting chart: " + reqURL + " info",
 			})
 			return
 		}
-		klog.Infoln("------------------------")
-		klog.Infoln(helmChart)
-
 		response.Values = helmChart.Values
-		/////////////////////////////////////////////////
 
 		klog.Infoln("Get Charts of " + reqChartName + " is successfully done")
 		respond(w, http.StatusOK, response)
@@ -236,4 +157,22 @@ func (hcm *HelmClientManager) GetCharts2(w http.ResponseWriter, r *http.Request)
 	klog.Infoln("Get Charts is successfully done")
 	respond(w, http.StatusOK, response)
 
+}
+
+func (hcm *HelmClientManager) getChart(chartName string, chartPathOptions *action.ChartPathOptions) (*chart.Chart, string, error) {
+	chartPath, err := chartPathOptions.LocateChart(chartName, hcm.Hcs.Settings)
+	if err != nil {
+		return nil, "", err
+	}
+
+	helmChart, err := loader.Load(chartPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if helmChart.Metadata.Deprecated {
+		hcm.Hcs.DebugLog("WARNING: This chart (%q) is deprecated", helmChart.Metadata.Name)
+	}
+
+	return helmChart, chartPath, err
 }
