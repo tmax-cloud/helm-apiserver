@@ -40,7 +40,7 @@ const (
 func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get Charts")
 	w.Header().Set("Content-Type", "application/json")
-	req := &schemas.RepoRequest{}
+	req := &schemas.ChartRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		klog.Errorln(err, "failed to decode request")
 		respond(w, http.StatusBadRequest, &schemas.Error{
