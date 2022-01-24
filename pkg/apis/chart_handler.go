@@ -4,19 +4,16 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 	"k8s.io/klog"
+	"sigs.k8s.io/yaml"
 
 	helmclient "github.com/mittwald/go-helm-client"
 )
-
-type Request struct {
-	ChartRepositoryName string
-}
 
 const (
 	indexFileSuffix  = "-index.yaml"
@@ -24,34 +21,57 @@ const (
 )
 
 // 설치 가능한 chart list 반환
-// AddChartRepo로 helm-charts 레포를 등록했다고 가정
-// helmcache에서 {chart-repo-name}-index.yaml
-// helmcache에서 {chart-repo-name}-charts.txt
 func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("GetCharts")
-	//req := schemas.ChartRequest{}
-	req := Request{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		return
-	}
-
-	charts, err := getChartList(req.ChartRepositoryName)
+	repositoriesFile, err := ioutil.ReadFile(repositoryConfig)
 	if err != nil {
-		klog.Errorln(err, "failed to get chart list")
+		klog.Errorln(err, "failed to read repo List file")
+		return
+	}
+	reposJsonFile, _ := yaml.YAMLToJSON(repositoriesFile)
+
+	reposFile := &schemas.RepositoryFile{}
+	if err := json.Unmarshal(reposJsonFile, reposFile); err != nil {
+		klog.Errorln(err, "failed to unmarshal repo file")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while unmarshalling request",
+		})
 		return
 	}
 
-	for i, s := range charts {
-		fmt.Println(i, s)
+	response := &schemas.ChartsResponse{}
+	for _, repo := range reposFile.Repositories {
+		indexFile, err := ioutil.ReadFile(repositoryCache + "/" + repo.Name + indexFileSuffix)
+		if err != nil {
+			klog.Errorln(err, "failed to read index file of "+repo.Name)
+			return
+		}
+
+		idxJsonFile, _ := yaml.YAMLToJSON(indexFile)
+
+		idxFile := &schemas.IndexFile{}
+		if err := json.Unmarshal(idxJsonFile, idxFile); err != nil {
+			klog.Errorln(err, "failed to unmarshal index file of "+repo.Name)
+			return
+		}
+
+		entries := idxFile.Entries
+		chartNames, _ := getChartNames(repo.Name)
+		for _, chartName := range chartNames {
+			chartinfos := entries[chartName]
+			for _, chartinfo := range chartinfos {
+				response.ChartInfos = append(response.ChartInfos, *chartinfo)
+			}
+		}
 	}
+
+	respond(w, http.StatusOK, response)
 }
 
-func getChartList(ChartRepoName string) ([]string, error) {
+func getChartNames(ChartRepoName string) ([]string, error) {
 	// open the file
 	file, err := os.Open(repositoryCache + "/" + ChartRepoName + chartsFileSuffix)
-
-	defer file.Close()
 
 	//handle errors while opening
 	if err != nil {
@@ -67,9 +87,9 @@ func getChartList(ChartRepoName string) ([]string, error) {
 	for fileScanner.Scan() {
 		line := fileScanner.Text()
 		chartList = append(chartList, line)
-		fmt.Println(line)
 	}
 
+	file.Close()
 	return chartList, nil
 }
 
@@ -83,7 +103,6 @@ func (hcm *HelmClientManager) InstallChart(w http.ResponseWriter, r *http.Reques
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: req.ReleaseName,
-		// ChartName:   path + req.Spec.Path,
 		ChartName:   req.PackageURL,
 		Namespace:   req.Namespace,
 		ValuesYaml:  req.Values,
