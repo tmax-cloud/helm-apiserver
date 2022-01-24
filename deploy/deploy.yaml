@@ -33,7 +33,7 @@ spec:
       serviceAccountName: helm-server-sa
       containers:
       - name: helm-server
-        image: 172.22.11.2:30500/helm-server:test
+        image: 172.22.11.2:30500/helm-apiserver:test # image name : helm-apiserver
         imagePullPolicy: Always
         volumeMounts:
           - name: helm-server-data
