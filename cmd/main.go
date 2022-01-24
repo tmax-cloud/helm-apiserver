@@ -32,10 +32,10 @@ func main() {
 
 	router.HandleFunc(chartPrefix, hcm.GetCharts).Methods("GET")                 // 설치 가능한 chart list 반환
 	router.HandleFunc(chartPrefix+"/{chart-name}", hcm.GetCharts).Methods("GET") // (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
-	router.HandleFunc(chartPrefix, hcm.InstallChart).Methods("POST")             // charts instance 생성
 
 	router.HandleFunc(releasePrefix, hcm.GetReleases).Methods("GET") // 설치된 release list 반환 (path-variable : 특정 release 정보 반환) helm client deployed releaselist 활용
 	router.HandleFunc(releasePrefix+"/{release-name}", hcm.GetReleases).Methods("GET")
+	router.HandleFunc(releasePrefix, hcm.InstallRelease).Methods("POST")                       // helm release 생성
 	router.HandleFunc(releasePrefix+"/{release-name}", hcm.UnInstallRelease).Methods("DELETE") // 설치된 release 전부 삭제 (path-variable : 특정 release 삭제)
 	router.HandleFunc(releasePrefix+"/{release-name}", hcm.RollbackRelease).Methods("PATCH")   // 일단 미사용 (update / rollback)
 

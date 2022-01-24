@@ -35,6 +35,13 @@ spec:
       - name: helm-server
         image: 172.22.11.2:30500/helm-server:test
         imagePullPolicy: Always
+        volumeMounts:
+          - name: helm-server-data
+            mountPath: /tmp # .helmrepo 버그 때문에 임시 경로 지정
+      volumes:
+        - name: helm-server-data
+          persistentVolumeClaim:
+            claimName: helm-server-pvc
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -5,8 +5,16 @@ import (
 )
 
 type ReleaseRequest struct {
-	ReleaseName string `json:"releasename,omitempty"`
-	Namespace   string `json:"namespace,omitempty"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	ReleaseRequestSpec `json:"releaseRequestSpec,omitempty"`
+	Values             string `json:"values,omitempty"`
+}
+
+type ReleaseRequestSpec struct {
+	PackageURL  string `json:"packageURL"`
+	ReleaseName string `json:"releaseName"`
+	Version     string `json:"version"`
 }
 
 type ReleaseResponse struct {
