@@ -11,8 +11,8 @@ kind: ClusterRole
 metadata:
   name: helm-server-test-role
 rules:
-- apiGroups: ["apps"]
-  resources: ["deployments"]
+- apiGroups: ["*"]
+  resources: ["*"]
   verbs: ["*"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

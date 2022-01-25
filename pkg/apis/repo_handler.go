@@ -41,7 +41,7 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 		URL:  req.RepoURL,
 	}
 
-	if err := hcm.Hc.AddOrUpdateChartRepo(chartRepo); err != nil {
+	if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
 		klog.Errorln(err, "failed to add chart repo")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -50,6 +50,7 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	klog.Infoln(req.Name + " repo is successfully added")
 	respond(w, http.StatusOK, req.Name+" repo is successfully added")
 }
 
@@ -91,10 +92,11 @@ func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Reque
 
 	// Set Response with repo Info list
 	response := &schemas.RepoResponse{}
-	for _, repo := range repoList.Repositories { // check 필요
-		response.RepoInfo = append(response.RepoInfo, repo)
+	for _, repository := range repoList.Repositories {
+		response.RepoInfo = append(response.RepoInfo, repository)
 	}
 
+	klog.Infoln("Get Chart repo is successfully done")
 	respond(w, http.StatusOK, response)
 }
 
@@ -165,7 +167,6 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// [TODO] : File open 먼저 해야되는지 check 필요
 	// Remove charts.txt file
 	if err := os.Remove(repositoryCache + "/" + reqRepoName + chartsFileSuffix); err != nil {
 		klog.Errorln(err, "failed to remove charts.txt file")
@@ -186,5 +187,76 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	respond(w, http.StatusOK, reqRepoName+" is successfully removed")
+	klog.Infoln(reqRepoName + " is successfully removed")
+	respond(w, http.StatusOK, reqRepoName+" repo is successfully removed")
+}
+
+func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Request) {
+	klog.Infoln("Update ChartRepo")
+	w.Header().Set("Content-Type", "application/json")
+	req := &schemas.RepoRequest{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		klog.Errorln(err, "failed to decode request")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while decoding request",
+		})
+		return
+	}
+
+	// Read repositoryConfig File which contains repo Info list
+	repoList := &schemas.RepositoryFile{}
+	repoListFile, err := ioutil.ReadFile(repositoryConfig)
+	if err != nil {
+		klog.Errorln(err, "failed to get repository list file")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while reading repository list file",
+		})
+		return
+	}
+
+	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
+
+	if err := json.Unmarshal(repoListFileJson, repoList); err != nil {
+		klog.Errorln(err, "failed to unmarshal repo file")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while unmarshalling request",
+		})
+		return
+	}
+
+	chartRepo := repo.Entry{}
+	for _, repo := range repoList.Repositories {
+		chartRepo.Name = repo.Name
+		chartRepo.URL = repo.Url
+
+		if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
+			klog.Errorln(err, "failed to update chart repo")
+			respond(w, http.StatusBadRequest, &schemas.Error{
+				Error:       err.Error(),
+				Description: "Error occurs while updating helm repo " + chartRepo.Name,
+			})
+			return
+		}
+		klog.Infoln(chartRepo.Name + " repo is successfully updated")
+	}
+
+	// TODO : Private Repository도 지원해줘야 함
+	// chartRepo := repo.Entry{
+	// 	Name: req.Name,
+	// 	URL:  req.RepoURL,
+	// }
+
+	// if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
+	// 	klog.Errorln(err, "failed to add chart repo")
+	// 	respond(w, http.StatusBadRequest, &schemas.Error{
+	// 		Error:       err.Error(),
+	// 		Description: "Error occurs while adding helm repo",
+	// 	})
+	// 	return
+	// }
+
+	respond(w, http.StatusOK, "repo update is successfully done")
 }

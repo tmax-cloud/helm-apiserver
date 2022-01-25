@@ -15,7 +15,8 @@ const (
 )
 
 type HelmClientManager struct {
-	Hc helmclient.Client
+	Hci helmclient.Client
+	Hcs helmclient.HelmClient
 }
 
 func (hcm *HelmClientManager) SetClientNS(ns string) {
@@ -52,7 +53,7 @@ func (hcm *HelmClientManager) SetClientNS(ns string) {
 		klog.Errorln(err, "failed to create helm client")
 	}
 
-	hcm.Hc = helmClient
+	hcm.Hci = helmClient
 }
 
 // [TODO]: req.header로 받은 token 값으로 교체 예정

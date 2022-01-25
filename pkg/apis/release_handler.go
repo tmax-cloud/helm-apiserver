@@ -28,7 +28,7 @@ func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request
 	}
 
 	hcm.SetClientNS(req.Namespace)
-	releases, err := hcm.Hc.ListDeployedReleases()
+	releases, err := hcm.Hci.ListDeployedReleases()
 	if err != nil {
 		klog.Errorln(err, "failed to get helm release list")
 		respond(w, http.StatusBadRequest, &schemas.Error{
@@ -74,7 +74,6 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: req.ReleaseName,
-		// ChartName:   path + req.Spec.Path,
 		ChartName:   req.PackageURL,
 		Namespace:   req.Namespace,
 		ValuesYaml:  req.Values,
@@ -84,7 +83,7 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 	}
 
 	// [TODO] ChartIsInstalled check 해야 하나?
-	if _, err := hcm.Hc.InstallOrUpgradeChart(context.Background(), &chartSpec); err != nil {
+	if _, err := hcm.Hci.InstallOrUpgradeChart(context.Background(), &chartSpec); err != nil {
 		klog.Errorln(err, "failed to install release")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -93,7 +92,7 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	respond(w, http.StatusOK, req.ReleaseName+" is successfully installed")
+	respond(w, http.StatusOK, req.ReleaseName+" release is successfully installed")
 }
 
 // 일단 안씀
@@ -123,7 +122,7 @@ func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Req
 		Wait:        false,
 	}
 
-	if err := hcm.Hc.RollbackRelease(&chartSpec, 0); err != nil {
+	if err := hcm.Hci.RollbackRelease(&chartSpec, 0); err != nil {
 		klog.Errorln(err, "failed to rollback chart")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -131,7 +130,7 @@ func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Req
 		})
 	}
 
-	respond(w, http.StatusOK, reqReleaseName+" is successfully rollbacked")
+	respond(w, http.StatusOK, reqReleaseName+" release is successfully rollbacked")
 }
 
 func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +150,7 @@ func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Re
 	reqReleaseName := vars["release-name"]
 
 	hcm.SetClientNS(req.Namespace)
-	if err := hcm.Hc.UninstallReleaseByName(reqReleaseName); err != nil {
+	if err := hcm.Hci.UninstallReleaseByName(reqReleaseName); err != nil {
 		klog.Errorln(err, "failed to uninstall chart")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -160,7 +159,7 @@ func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respond(w, http.StatusOK, reqReleaseName+" is successfully uninstalled")
+	respond(w, http.StatusOK, reqReleaseName+" release is successfully uninstalled")
 }
 
 func respond(w http.ResponseWriter, statusCode int, body interface{}) {
