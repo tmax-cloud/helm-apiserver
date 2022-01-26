@@ -12,6 +12,8 @@
 
 ## Helm-apiserver API 요약
 
-|리소스|POST|GET|PUT|DELETE|
+| 리소스 | POST | GET | PUT | DELETE |
 |:------- |:-------|:------- |:-------|:-------|
-| /charts/ | X | O | X | X |
+| /repos/{repo-name} | O | O | O | O |
+| /charts/{chart-name| O | O | O | O |
+| /releases/{release-name} | O | O | O | O |
