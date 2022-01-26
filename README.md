@@ -11,6 +11,7 @@
 - kubectl apply -f deploy.yaml ([파일](./deploy/deploy.yaml))
 
 ## Helm-apiserver API 요약
+
 | 리소스 | POST | GET | PUT | DELETE |
 | ------- | ------- | ------- | ------- |
 | /charts/| X | O | X | X |
