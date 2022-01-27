@@ -14,13 +14,13 @@ COPY internal/ internal/
 COPY pkg/ pkg/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o helm-server cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o helm-apiserver cmd/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM golang:1.16
 WORKDIR /
-COPY --from=builder /workspace/helm-server .
+COPY --from=builder /workspace/helm-apiserver .
 USER root
 
-ENTRYPOINT ["/helm-server"]
+ENTRYPOINT ["/helm-apiserver"]

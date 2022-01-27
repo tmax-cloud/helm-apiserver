@@ -1,7 +1,7 @@
 REGISTRY      ?= tmaxcloudck
 VERSION       ?= 0.0.1
 
-HS_IMG   = $(REGISTRY)/helm-server:$(VERSION)
+HS_IMG   = $(REGISTRY)/helm-apiserver:$(VERSION)
 
 .PHONY: test build push
 
