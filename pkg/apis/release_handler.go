@@ -14,20 +14,16 @@ import (
 	helmclient "github.com/mittwald/go-helm-client"
 )
 
+// [TODO]
+// 1. all-namespace 구현
 func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("GetRelease")
 	w.Header().Set("Content-Type", "application/json")
-	req := schemas.ReleaseRequest{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while decoding request",
-		})
-		return
-	}
 
-	hcm.SetClientNS(req.Namespace)
+	vars := mux.Vars(r)
+	namespace := vars["ns-name"]
+	hcm.SetClientNS(namespace)
+
 	releases, err := hcm.Hci.ListDeployedReleases()
 	if err != nil {
 		klog.Errorln(err, "failed to get helm release list")
@@ -39,7 +35,7 @@ func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request
 	}
 
 	response := &schemas.ReleaseResponse{}
-	vars := mux.Vars(r)
+
 	reqReleaseName, exist := vars["release-name"]
 	if exist {
 		for _, rel := range releases {
@@ -72,10 +68,13 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	vars := mux.Vars(r)
+	namespace := vars["ns-name"]
+
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: req.ReleaseName,
 		ChartName:   req.PackageURL,
-		Namespace:   req.Namespace,
+		Namespace:   namespace,
 		ValuesYaml:  req.Values,
 		Version:     req.Version,
 		UpgradeCRDs: true,
@@ -97,7 +96,7 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 
 // 일단 안씀
 func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("RollbackRelease")
+	klog.Infoln("Rollback Release")
 	w.Header().Set("Content-Type", "application/json")
 	req := schemas.ReleaseRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -110,12 +109,13 @@ func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Req
 	}
 
 	vars := mux.Vars(r)
+	namespace := vars["ns-name"]
 	reqReleaseName := vars["release-name"]
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: reqReleaseName,
 		ChartName:   req.PackageURL,
-		Namespace:   req.Namespace,
+		Namespace:   namespace,
 		ValuesYaml:  req.Values,
 		Version:     req.Version,
 		UpgradeCRDs: true,
@@ -136,20 +136,21 @@ func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Req
 func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("UnInstallRelease")
 	w.Header().Set("Content-Type", "application/json")
-	req := schemas.ReleaseRequest{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while decoding request",
-		})
-		return
-	}
+	// req := schemas.ReleaseRequest{}
+	// if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// 	klog.Errorln(err, "failed to decode request")
+	// 	respond(w, http.StatusBadRequest, &schemas.Error{
+	// 		Error:       err.Error(),
+	// 		Description: "Error occurs while decoding request",
+	// 	})
+	// 	return
+	// }
 
 	vars := mux.Vars(r)
+	namespace := vars["ns-name"]
 	reqReleaseName := vars["release-name"]
 
-	hcm.SetClientNS(req.Namespace)
+	hcm.SetClientNS(namespace)
 	if err := hcm.Hci.UninstallReleaseByName(reqReleaseName); err != nil {
 		klog.Errorln(err, "failed to uninstall chart")
 		respond(w, http.StatusBadRequest, &schemas.Error{

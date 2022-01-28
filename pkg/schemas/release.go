@@ -5,8 +5,9 @@ import (
 )
 
 type ReleaseRequest struct {
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
+	// 일단은 path-variable로 구현해서 namespace 필요 없으나
+	// GetRelease 제외 하고 필요할 수도 있으므로 일단 보류
+	// Namespace          string `json:"namespace"`
 	ReleaseRequestSpec `json:"releaseRequestSpec,omitempty"`
 	Values             string `json:"values,omitempty"`
 }
