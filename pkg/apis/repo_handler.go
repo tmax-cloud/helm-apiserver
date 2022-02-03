@@ -57,15 +57,6 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get chartRepos")
 	w.Header().Set("Content-Type", "application/json")
-	req := &schemas.RepoRequest{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while decoding request",
-		})
-		return
-	}
 
 	// Read repositoryConfig File which contains repo Info list
 	repoList := &schemas.RepositoryFile{}
@@ -103,15 +94,6 @@ func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Reque
 func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Delete chartRepos")
 	w.Header().Set("Content-Type", "application/json")
-	req := &schemas.RepoRequest{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while decoding request",
-		})
-		return
-	}
 
 	vars := mux.Vars(r)
 	reqRepoName := vars["repo-name"]
@@ -194,15 +176,6 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Update ChartRepo")
 	w.Header().Set("Content-Type", "application/json")
-	req := &schemas.RepoRequest{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while decoding request",
-		})
-		return
-	}
 
 	// Read repositoryConfig File which contains repo Info list
 	repoList := &schemas.RepositoryFile{}
@@ -232,6 +205,7 @@ func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Req
 		chartRepo.Name = repo.Name
 		chartRepo.URL = repo.Url
 
+		// TODO : Private Repository도 지원해줘야 함
 		if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
 			klog.Errorln(err, "failed to update chart repo")
 			respond(w, http.StatusBadRequest, &schemas.Error{
@@ -242,21 +216,6 @@ func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Req
 		}
 		klog.Infoln(chartRepo.Name + " repo is successfully updated")
 	}
-
-	// TODO : Private Repository도 지원해줘야 함
-	// chartRepo := repo.Entry{
-	// 	Name: req.Name,
-	// 	URL:  req.RepoURL,
-	// }
-
-	// if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
-	// 	klog.Errorln(err, "failed to add chart repo")
-	// 	respond(w, http.StatusBadRequest, &schemas.Error{
-	// 		Error:       err.Error(),
-	// 		Description: "Error occurs while adding helm repo",
-	// 	})
-	// 	return
-	// }
 
 	respond(w, http.StatusOK, "repo update is successfully done")
 }
