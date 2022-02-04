@@ -37,14 +37,15 @@
   * {chart-name}의 chart index.yaml 및 values.yaml 정보 반환
 
 **/releases**
-- POST /releases
+- Namespace scope 리소스이므로 Namespace path 있음
+- POST /ns/{ns-name}/releases
   * 요청된 Helm chart install
-- GET /releases
+- GET /ns/{ns-name}/releases
   * 설치된 Helm release list 반환
-- GET /releases/{release-name}
+- GET /ns/{ns-name}/releases/{release-name}
   * {release-name}의 Helm release 정보 반환
-- PUT /releases/{release-name}
+- PUT /ns/{ns-name}/releases/{release-name}
   * {release-name}의 Helm release update
-- DELETE /releases/{release-name}
+- DELETE /ns/{ns-name}/releases/{release-name}
   * {release-name}의 Helm release uninstall
 
