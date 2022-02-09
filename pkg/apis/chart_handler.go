@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
@@ -21,9 +23,6 @@ const (
 	indexFileSuffix  = "-index.yaml"
 	chartsFileSuffix = "-charts.txt"
 )
-
-// 1. category 분류 query로 할지 UI에서 진행할지 확인 필요 (UI)
-// 2. Repo 별로 chart 따로 response 할지 확인 필요 (기획)
 
 func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get Charts")
@@ -52,6 +51,7 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// store repo names into repoNames slice
 	var repoNames []string
 	for _, repository := range repoList.Repositories {
 		repoNames = append(repoNames, repository.Name)
@@ -59,13 +59,13 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 
 	response := &schemas.ChartResponse{}
 	index := &repo.IndexFile{}
-	responseEntries := make(map[string]repo.ChartVersions)
+	allEntries := make(map[string]repo.ChartVersions)
+	repositoryEntries := make(map[string]repo.ChartVersions)
+	searchEntries := make(map[string]repo.ChartVersions)
 
 	// read all index.yaml file and save only Entries
 	for _, repoName := range repoNames {
-		indexFile, err := ioutil.ReadFile(repositoryCache + "/" + repoName + indexFileSuffix)
-		if err != nil {
-			klog.Errorln(err, "failed to read index.yaml file of "+repoName)
+		if index, err = readRepoIndex(repoName); err != nil {
 			respond(w, http.StatusBadRequest, &schemas.Error{
 				Error:       err.Error(),
 				Description: "Error occurs while reading index.yaml file of " + repoName,
@@ -73,19 +73,73 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		indexFileJson, _ := yaml.YAMLToJSON(indexFile) // Should transform yaml to Json
+		for key, value := range index.Entries {
+			allEntries[key] = value
+		}
+	}
 
-		if err := json.Unmarshal(indexFileJson, index); err != nil {
-			klog.Errorln(err, "failed to unmarshal index file")
+	query, _ := url.ParseQuery(r.URL.RawQuery)
+	_, repository := query["repository"]
+	_, search := query["search"]
+
+	// in case of query parameter "repository" is requested
+	if repository {
+		r_index := &repo.IndexFile{}
+		repoName := query.Get("repository")
+		if r_index, err = readRepoIndex(repoName); err != nil {
 			respond(w, http.StatusBadRequest, &schemas.Error{
 				Error:       err.Error(),
-				Description: "Error occurs while unmarshalling index file",
+				Description: "Error occurs while reading index.yaml file of " + repoName,
 			})
 			return
 		}
 
-		for key, value := range index.Entries {
-			responseEntries[key] = value
+		for key, value := range r_index.Entries {
+			repositoryEntries[key] = value
+		}
+	}
+
+	// in case of query parameter "search" is requested
+	if search {
+		var keywords []string
+		searcher := query.Get("search")
+
+		if repository {
+			for key, value := range repositoryEntries {
+				if strings.Contains(key, searcher) {
+					searchEntries[key] = value
+					continue // go to next key
+				}
+
+				for _, chart := range value {
+					keywords = chart.Keywords
+				}
+
+				for _, keyword := range keywords {
+					if strings.Contains(keyword, searcher) {
+						searchEntries[key] = value
+						break // break present for loop
+					}
+				}
+			}
+		} else {
+			for key, value := range allEntries {
+				if strings.Contains(key, searcher) {
+					searchEntries[key] = value
+					continue // go to next key
+				}
+
+				for _, chart := range value {
+					keywords = chart.Keywords
+				}
+
+				for _, keyword := range keywords {
+					if strings.Contains(keyword, searcher) {
+						searchEntries[key] = value
+						break // break present for loop
+					}
+				}
+			}
 		}
 	}
 
@@ -98,13 +152,12 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 	var reqURL string
 
 	if exist {
-		index.Entries[reqChartName] = responseEntries[reqChartName]
-		for _, chart := range index.Entries[reqChartName] {
+		for _, chart := range allEntries[reqChartName] {
 			if chart.Name == reqChartName {
 				chartVersions = append(chartVersions, chart)
 				onlyOneEntries[reqChartName] = chartVersions
 
-				// get reqURL value for value.yaml
+				// get reqURL value for values.yaml
 				for _, url := range chart.URLs {
 					reqURL = url
 				}
@@ -113,13 +166,13 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 		index.Entries = onlyOneEntries
 		response.IndexFile = *index
 
-		helmChart, _, _ := hcm.getChart(reqURL, &action.ChartPathOptions{})
+		helmChart, _, err := hcm.getChart(reqURL, &action.ChartPathOptions{})
 
 		if helmChart == nil {
-			klog.Errorln(err, "failed to get chart: "+reqURL+" info")
+			klog.Errorln(err, "failed to get chart: "+reqChartName+" info")
 			respond(w, http.StatusBadRequest, &schemas.Error{
 				Error:       err.Error(),
-				Description: "Error occurs while getting chart: " + reqURL + " info",
+				Description: "Error occurs while getting chart: " + reqChartName + " info",
 			})
 			return
 		}
@@ -130,14 +183,25 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	index.Entries = responseEntries // add all repo's the entries
-	response.IndexFile = *index
+	// set response following switch cases of query params
+	switch {
+	case repository && !search:
+		index.Entries = repositoryEntries // set requested repo's the entries
+		response.IndexFile = *index
+	case search:
+		index.Entries = searchEntries // set requested search's the entries
+		response.IndexFile = *index
+	default:
+		index.Entries = allEntries // set all repo's the entries
+		response.IndexFile = *index
+	}
 
 	klog.Infoln("Get Charts is successfully done")
 	respond(w, http.StatusOK, response)
 
 }
 
+// this function is for get values info
 func (hcm *HelmClientManager) getChart(chartName string, chartPathOptions *action.ChartPathOptions) (*chart.Chart, string, error) {
 	chartPath, err := chartPathOptions.LocateChart(chartName, hcm.Hcs.Settings)
 	if err != nil {
@@ -154,4 +218,22 @@ func (hcm *HelmClientManager) getChart(chartName string, chartPathOptions *actio
 	}
 
 	return helmChart, chartPath, err
+}
+
+func readRepoIndex(repoName string) (index *repo.IndexFile, err error) {
+	index = &repo.IndexFile{}
+	indexFile, err := ioutil.ReadFile(repositoryCache + "/" + repoName + indexFileSuffix)
+	if err != nil {
+		klog.Errorln(err, "failed to read index.yaml file of "+repoName)
+		return nil, err
+	}
+
+	indexFileJson, _ := yaml.YAMLToJSON(indexFile) // Should transform yaml to Json
+
+	if err := json.Unmarshal(indexFileJson, index); err != nil {
+		klog.Errorln(err, "failed to unmarshal index file")
+		return nil, err
+	}
+
+	return index, nil
 }
