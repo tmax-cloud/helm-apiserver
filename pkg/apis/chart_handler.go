@@ -29,10 +29,8 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList := &schemas.RepositoryFile{}
-	repoListFile, err := ioutil.ReadFile(repositoryConfig)
+	repoList, err := readRepoList()
 	if err != nil {
-		klog.Errorln(err, "failed to get repository list file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while reading repository list file",
@@ -40,21 +38,10 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
-
-	if err := json.Unmarshal(repoListFileJson, repoList); err != nil {
-		klog.Errorln(err, "failed to unmarshal repo file")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while unmarshalling request",
-		})
-		return
-	}
-
-	// store repo names into repoNames slice
 	var repoNames []string
-	for _, repository := range repoList.Repositories {
-		repoNames = append(repoNames, repository.Name)
+	// store repo names into repoNames slice
+	for _, repoInfo := range repoList.Repositories {
+		repoNames = append(repoNames, repoInfo.Name)
 	}
 
 	response := &schemas.ChartResponse{}
@@ -236,4 +223,22 @@ func readRepoIndex(repoName string) (index *repo.IndexFile, err error) {
 	}
 
 	return index, nil
+}
+
+func readRepoList() (repoList *schemas.RepositoryFile, err error) {
+	repoList = &schemas.RepositoryFile{}
+	repoListFile, err := ioutil.ReadFile(repositoryConfig)
+	if err != nil {
+		klog.Errorln(err, "failed to get repository list file")
+		return nil, err
+	}
+
+	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
+
+	if err = json.Unmarshal(repoListFileJson, repoList); err != nil {
+		klog.Errorln(err, "failed to unmarshal repo file")
+		return nil, err
+	}
+
+	return repoList, nil
 }
