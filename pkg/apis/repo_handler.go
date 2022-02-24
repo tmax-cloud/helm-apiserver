@@ -22,6 +22,14 @@ import (
 // 	chartsFileSuffix = "-charts.txt"
 // )
 
+// [Plan A]
+// Helm cache file or dir 을 비워주고 add chart repo
+
+// [Plan B] - 현재 구현
+// -index.yaml 과 .helmrepo 파일의 sync가 안맞음
+// add chart repo 후, -index.yaml 파일은 있는데 같은이름이 .helmrepo 파일에 없을경우
+// .helmrepo 파일에 request로 들어온 name / url을 덮어씌워주고 마무리.
+
 func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Add ChartRepo")
 	w.Header().Set("Content-Type", "application/json")
@@ -33,6 +41,33 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 			Description: "Error occurs while decoding request",
 		})
 		return
+	}
+
+	// Read repositoryConfig File which contains repo Info list
+	repoList, err := readRepoList()
+	if err != nil {
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while reading repository list file",
+		})
+		return
+	}
+
+	var repoNames []string
+	// store repo names into repoNames slice
+	for _, repoInfo := range repoList.Repositories {
+		repoNames = append(repoNames, repoInfo.Name)
+	}
+
+	// Check if req repoName is already exist
+	for _, repoName := range repoNames {
+		if req.Name == repoName {
+			klog.Errorln(req.Name + " name repository is already exist")
+			respond(w, http.StatusBadRequest, &schemas.Error{
+				Description: req.Name + " name repository is already exist",
+			})
+			return
+		}
 	}
 
 	// TODO : Private Repository도 지원해줘야 함
@@ -50,6 +85,40 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Read repositoryConfig File which contains repo Info list
+	afterRepoList, err := readRepoList()
+	if err != nil {
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while reading repository list file",
+		})
+		return
+	}
+
+	sync := true
+	for _, repo := range afterRepoList.Repositories {
+		if repo.Name == req.Name {
+			sync = false
+		}
+	}
+
+	// -index.yaml 파일과 .helmrepo 파일 sync
+	if sync {
+		afterRepoList.Repositories = append(afterRepoList.Repositories, schemas.Repository{
+			Name: req.Name,
+			Url:  req.RepoURL,
+		})
+
+		if err := writeRepoList(afterRepoList); err != nil {
+			respond(w, http.StatusBadRequest, &schemas.Error{
+				Error:       err.Error(),
+				Description: "Error occurs while sync repo list file",
+			})
+			return
+		}
+
+	}
+
 	klog.Infoln(req.Name + " repo is successfully added")
 	respond(w, http.StatusOK, req.Name+" repo is successfully added")
 }
@@ -59,10 +128,8 @@ func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList := &schemas.RepositoryFile{}
-	repoListFile, err := ioutil.ReadFile(repositoryConfig)
+	repoList, err := readRepoList()
 	if err != nil {
-		klog.Errorln(err, "failed to get repository list file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while reading repository list file",
@@ -70,22 +137,9 @@ func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
-
-	if err := json.Unmarshal(repoListFileJson, repoList); err != nil {
-		klog.Errorln(err, "failed to unmarshal repo file")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while unmarshalling request",
-		})
-		return
-	}
-
 	// Set Response with repo Info list
 	response := &schemas.RepoResponse{}
-	for _, repository := range repoList.Repositories {
-		response.RepoInfo = append(response.RepoInfo, repository)
-	}
+	response.RepoInfo = repoList.Repositories
 
 	klog.Infoln("Get Chart repo is successfully done")
 	respond(w, http.StatusOK, response)
@@ -99,24 +153,11 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 	reqRepoName := vars["repo-name"]
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList := &schemas.RepositoryFile{}
-	repoListFile, err := ioutil.ReadFile(repositoryConfig)
+	repoList, err := readRepoList()
 	if err != nil {
-		klog.Errorln(err, "failed to get repository list file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while reading repository list file",
-		})
-		return
-	}
-
-	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
-
-	if err := json.Unmarshal(repoListFileJson, repoList); err != nil {
-		klog.Errorln(err, "failed to unmarshal repo list")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while unmarshalling repo list",
 		})
 		return
 	}
@@ -129,27 +170,15 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	newRepoListFile, err := json.Marshal(newRepoList)
-	if err != nil {
-		klog.Errorln(err, "failed to marshal repo list")
+	if err := writeRepoList(newRepoList); err != nil {
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
-			Description: "Error occurs while marshalling repo list",
+			Description: "Error occurs while sync repo list file",
 		})
 		return
 	}
 
-	// Update repository.yaml file without requested repo
-	if err := ioutil.WriteFile(repositoryConfig, newRepoListFile, 0644); err != nil {
-		klog.Errorln(err, "failed to write new repo list file")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while writing new repo list file",
-		})
-		return
-	}
-
-	// Remove charts.txt file
+	// Remove -charts.txt file
 	if err := os.Remove(repositoryCache + "/" + reqRepoName + chartsFileSuffix); err != nil {
 		klog.Errorln(err, "failed to remove charts.txt file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
@@ -159,7 +188,7 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Remove index.yaml file
+	// Remove -index.yaml file
 	if err := os.Remove(repositoryCache + "/" + reqRepoName + indexFileSuffix); err != nil {
 		klog.Errorln(err, "failed to remove index.yaml file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
@@ -178,24 +207,11 @@ func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", "application/json")
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList := &schemas.RepositoryFile{}
-	repoListFile, err := ioutil.ReadFile(repositoryConfig)
+	repoList, err := readRepoList()
 	if err != nil {
-		klog.Errorln(err, "failed to get repository list file")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while reading repository list file",
-		})
-		return
-	}
-
-	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
-
-	if err := json.Unmarshal(repoListFileJson, repoList); err != nil {
-		klog.Errorln(err, "failed to unmarshal repo file")
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while unmarshalling request",
 		})
 		return
 	}
@@ -218,4 +234,22 @@ func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Req
 	}
 
 	respond(w, http.StatusOK, "repo update is successfully done")
+}
+
+func writeRepoList(repoList *schemas.RepositoryFile) error {
+	newRepoListFile, err := json.Marshal(repoList)
+	if err != nil {
+		klog.Errorln(err, "failed to marshal repo list")
+		return err
+	}
+
+	newRepoListFileYaml, _ := yaml.JSONToYAML(newRepoListFile) // Should transform Json to Yaml
+
+	// Update repository.yaml file without requested repo
+	if err := ioutil.WriteFile(repositoryConfig, newRepoListFileYaml, 0644); err != nil {
+		klog.Errorln(err, "failed to write new repo list file")
+		return err
+	}
+
+	return nil
 }
