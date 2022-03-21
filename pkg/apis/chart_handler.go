@@ -28,6 +28,15 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 	klog.Infoln("Get Charts")
 	w.Header().Set("Content-Type", "application/json")
 
+	// sync the latest charts
+	if err := hcm.updateChartRepo(); err != nil {
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while sync the latest charts",
+		})
+		return
+	}
+
 	// Read repositoryConfig File which contains repo Info list
 	repoList, err := readRepoList()
 	if err != nil {
@@ -38,20 +47,20 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var repoNames []string
+	repoInfos := make(map[string]string)
 	// store repo names into repoNames slice
 	for _, repoInfo := range repoList.Repositories {
-		repoNames = append(repoNames, repoInfo.Name)
+		repoInfos[repoInfo.Name] = repoInfo.Url
 	}
 
 	response := &schemas.ChartResponse{}
-	index := &repo.IndexFile{}
-	allEntries := make(map[string]repo.ChartVersions)
-	repositoryEntries := make(map[string]repo.ChartVersions)
-	searchEntries := make(map[string]repo.ChartVersions)
+	index := &schemas.IndexFile{}
+	allEntries := make(map[string]schemas.ChartVersions)
+	repositoryEntries := make(map[string]schemas.ChartVersions)
+	searchEntries := make(map[string]schemas.ChartVersions)
 
 	// read all index.yaml file and save only Entries
-	for _, repoName := range repoNames {
+	for repoName, repoUrl := range repoInfos {
 		if index, err = readRepoIndex(repoName); err != nil {
 			respond(w, http.StatusBadRequest, &schemas.Error{
 				Error:       err.Error(),
@@ -60,7 +69,12 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
+		// add repo info
 		for key, value := range index.Entries {
+			for _, chart := range value {
+				chart.Repo.Name = repoName
+				chart.Repo.Url = repoUrl
+			}
 			allEntries[key] = value
 		}
 	}
@@ -71,7 +85,7 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 
 	// in case of query parameter "repository" is requested
 	if repository {
-		r_index := &repo.IndexFile{}
+		r_index := &schemas.IndexFile{}
 		repoName := query.Get("repository")
 		if r_index, err = readRepoIndex(repoName); err != nil {
 			respond(w, http.StatusBadRequest, &schemas.Error{
@@ -134,8 +148,8 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 	vars := mux.Vars(r)
 	reqChartName, exist := vars["chart-name"]
 
-	onlyOneEntries := make(map[string]repo.ChartVersions)
-	var chartVersions []*repo.ChartVersion
+	onlyOneEntries := make(map[string]schemas.ChartVersions)
+	var chartVersions []*schemas.ChartVersion
 	var reqURL string
 
 	if exist {
@@ -207,8 +221,8 @@ func (hcm *HelmClientManager) getChart(chartName string, chartPathOptions *actio
 	return helmChart, chartPath, err
 }
 
-func readRepoIndex(repoName string) (index *repo.IndexFile, err error) {
-	index = &repo.IndexFile{}
+func readRepoIndex(repoName string) (index *schemas.IndexFile, err error) {
+	index = &schemas.IndexFile{}
 	indexFile, err := ioutil.ReadFile(repositoryCache + "/" + repoName + indexFileSuffix)
 	if err != nil {
 		klog.Errorln(err, "failed to read index.yaml file of "+repoName)
@@ -241,4 +255,27 @@ func readRepoList() (repoList *schemas.RepositoryFile, err error) {
 	}
 
 	return repoList, nil
+}
+
+func (hcm *HelmClientManager) updateChartRepo() error {
+	klog.Infoln("Sync the latest chart info")
+
+	// Read repositoryConfig File which contains repo Info list
+	repoList, err := readRepoList()
+	if err != nil {
+		klog.Errorln(err, "failed to get repoList while sync latest chart info")
+		return err
+	}
+
+	chartRepo := repo.Entry{}
+	for _, repo := range repoList.Repositories {
+		chartRepo.Name = repo.Name
+		chartRepo.URL = repo.Url
+
+		if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
+			klog.Errorln(err, "failed to update chart repo")
+			return err
+		}
+	}
+	return nil
 }

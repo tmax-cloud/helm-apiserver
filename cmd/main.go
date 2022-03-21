@@ -127,7 +127,6 @@ func newClientFromRestConf(options *helmclient.RestConfClientOptions) (helmclien
 	return newClient(options.Options, clientGetter, settings)
 }
 
-// field 정의 안되는 문제 확인 필요
 func newRESTClientGetter(namespace string, kubeConfig []byte, restConfig *rest.Config) *helmclient.RESTClientGetter {
 	return &helmclient.RESTClientGetter{}
 }

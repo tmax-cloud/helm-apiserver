@@ -5,10 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"strings"
+
+	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
+	"github.com/jinzhu/copier"
 
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/conversion"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 
 	helmclient "github.com/mittwald/go-helm-client"
@@ -34,11 +41,23 @@ func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	response := &schemas.ReleaseResponse{}
+	var customReleases []*schemas.Release
+	for _, rel := range releases {
+		customRelease := &schemas.Release{}
+		copier.Copy(customRelease, rel)
+		customReleases = append(customReleases, customRelease)
+	}
 
+	for _, rel := range customReleases {
+		if err := setObjectsInfo(rel); err != nil {
+			klog.Errorln(err, "Error occurs while setting Obejcts field")
+		}
+	}
+
+	response := &schemas.ReleaseResponse{}
 	reqReleaseName, exist := vars["release-name"]
 	if exist {
-		for _, rel := range releases {
+		for _, rel := range customReleases {
 			if rel.Name == reqReleaseName {
 				response.Release = append(response.Release, *rel)
 			}
@@ -48,7 +67,7 @@ func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	for _, rel := range releases {
+	for _, rel := range customReleases {
 		response.Release = append(response.Release, *rel)
 	}
 
@@ -168,4 +187,55 @@ func respond(w http.ResponseWriter, statusCode int, body interface{}) {
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		klog.Errorln(err, "Error occurs while encoding response body")
 	}
+}
+
+func setObjectsInfo(rel *schemas.Release) error {
+	var temp []string
+	var objects []*runtime.RawExtension
+
+	splits1 := strings.Split(rel.Manifest, "---")
+
+	for _, spl := range splits1 {
+		splits2 := strings.Split(spl, ".yaml")
+		temp = append(temp, splits2...)
+	}
+
+	for _, t := range temp {
+		if strings.Contains(t, "apiVersion") {
+			trans := []byte(strings.TrimSpace(t))
+			raw, _ := yaml.YAMLToJSON(trans) // needed to transform unstr type
+
+			obj := &runtime.RawExtension{
+				Raw: raw,
+			}
+			objects = append(objects, obj)
+		}
+	}
+
+	objMap := make(map[string]string)
+	for _, obj := range objects {
+		unstr, err := BytesToUnstructuredObject(obj)
+		if err != nil {
+			klog.Errorln(err, "failed to transform to unstr type")
+			return err
+		}
+		objMap[unstr.GetKind()] = unstr.GetName()
+	}
+	rel.Objects = objMap
+	return nil
+}
+
+func BytesToUnstructuredObject(obj *runtime.RawExtension) (*unstructured.Unstructured, error) {
+	var in runtime.Object
+	var scope conversion.Scope // While not actually used within the function, need to pass in
+	if err := runtime.Convert_runtime_RawExtension_To_runtime_Object(obj, &in, scope); err != nil {
+		return nil, err
+	}
+
+	unstrObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(in)
+	if err != nil {
+		return nil, err
+	}
+
+	return &unstructured.Unstructured{Object: unstrObj}, nil
 }
