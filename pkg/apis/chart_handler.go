@@ -29,13 +29,13 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 
 	// sync the latest charts
-	if err := hcm.updateChartRepo(); err != nil {
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while sync the latest charts",
-		})
-		return
-	}
+	// if err := hcm.updateChartRepo(); err != nil {
+	// 	respond(w, http.StatusBadRequest, &schemas.Error{
+	// 		Error:       err.Error(),
+	// 		Description: "Error occurs while sync the latest charts",
+	// 	})
+	// 	return
+	// }
 
 	// Read repositoryConfig File which contains repo Info list
 	repoList, err := readRepoList()
@@ -257,6 +257,7 @@ func readRepoList() (repoList *schemas.RepositoryFile, err error) {
 	return repoList, nil
 }
 
+// [TODO] : Private repo별로 TLS client 세팅 해줘야함...
 func (hcm *HelmClientManager) updateChartRepo() error {
 	klog.Infoln("Sync the latest chart info")
 

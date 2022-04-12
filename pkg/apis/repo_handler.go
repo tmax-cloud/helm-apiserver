@@ -11,10 +11,16 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 	"k8s.io/klog"
 
+	// "github.com/tmax-cloud/helm-apiserver/internal"
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 )
 
-// const (
+const (
+	ca_crt      = "/tmp/cert/ca.crt"
+	public_key  = "/tmp/cert/tls.crt"
+	private_key = "/tmp/cert/tls.key"
+)
+
 // 	repositoryCache  = "/tmp/.helmcache" // 캐시 디렉토리. 특정 chart-repo에 해당하는 chart 이름 리스트 txt파일과, 해당 repo의 index.yaml 파일이 저장됨
 // 	repositoryConfig = "/tmp/.helmrepo"  // 현재 add된 repo들 저장. go helm client 버그. 무조건 /tmp/.helmrepo 에다가 저장됨.
 
@@ -29,6 +35,19 @@ import (
 // -index.yaml 과 .helmrepo 파일의 sync가 안맞음
 // add chart repo 후, -index.yaml 파일은 있는데 같은이름이 .helmrepo 파일에 없을경우
 // .helmrepo 파일에 request로 들어온 name / url을 덮어씌워주고 마무리.
+// func init() {
+// 	klog.Infoln("Add default Chart repo")
+// 	chartRepo := repo.Entry{
+// 		Name: "tmax-stable",
+// 		URL:  "https://tmax-cloud.github.io/helm-charts/stable",
+// 	}
+
+// 	hci := internal.NewHelmClientInterface()
+// 	if err := hci.AddOrUpdateChartRepo(chartRepo); err != nil {
+// 		klog.Errorln(err, "failed to add default tmax chart repo")
+// 		return
+// 	}
+// }
 
 func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Add ChartRepo")
@@ -43,38 +62,47 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Read repositoryConfig File which contains repo Info list
-	repoList, err := readRepoList()
-	if err != nil {
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while reading repository list file",
-		})
-		return
-	}
+	// init 으로 tmax-repo 기본으로 추가하면 괜찮은데 안하면 쓰면안됨
+	// // Read repositoryConfig File which contains repo Info list
+	// repoList, err := readRepoList()
+	// if err != nil {
+	// 	respond(w, http.StatusBadRequest, &schemas.Error{
+	// 		Error:       err.Error(),
+	// 		Description: "Error occurs while reading repository list file",
+	// 	})
+	// 	return
+	// }
 
-	var repoNames []string
-	// store repo names into repoNames slice
-	for _, repoInfo := range repoList.Repositories {
-		repoNames = append(repoNames, repoInfo.Name)
-	}
+	// var repoNames []string
+	// // store repo names into repoNames slice
+	// for _, repoInfo := range repoList.Repositories {
+	// 	repoNames = append(repoNames, repoInfo.Name)
+	// }
 
-	// Check if req repoName is already exist
-	for _, repoName := range repoNames {
-		if req.Name == repoName {
-			klog.Errorln(req.Name + " name repository is already exist")
-			respond(w, http.StatusBadRequest, &schemas.Error{
-				Description: req.Name + " name repository is already exist",
-			})
-			return
-		}
-	}
+	// // Check if req repoName is already exist
+	// for _, repoName := range repoNames {
+	// 	if req.Name == repoName {
+	// 		klog.Errorln(req.Name + " name repository is already exist")
+	// 		respond(w, http.StatusBadRequest, &schemas.Error{
+	// 			Description: req.Name + " name repository is already exist",
+	// 		})
+	// 		return
+	// 	}
+	// }
 
 	// TODO : Private Repository도 지원해줘야 함
 	chartRepo := repo.Entry{
 		Name: req.Name,
 		URL:  req.RepoURL,
+		// Username:              "root",
+		// Password:              "xGKHTDxr3T3V6yPSDqKq",
+		// CAFile:                ca_crt,
+		// CertFile:              public_key,
+		// KeyFile:               private_key,
+		// InsecureSkipTLSverify: true,
 	}
+
+	// hcm.SetClientTLS(req.RepoURL)
 
 	if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
 		klog.Errorln(err, "failed to add chart repo")
