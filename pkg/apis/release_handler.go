@@ -10,27 +10,61 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
 	"github.com/jinzhu/copier"
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/release"
 
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/conversion"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 
 	helmclient "github.com/mittwald/go-helm-client"
 )
 
-// [TODO]
-// 1. all-namespace 구현
+// Get all-namespace 구현
+func (hcm *HelmClientManager) GetAllReleases(w http.ResponseWriter, r *http.Request) {
+	klog.Infoln("Get All Releases")
+	w.Header().Set("Content-Type", "application/json")
+
+	releases, err := hcm.listDeployedReleases()
+	if err != nil {
+		klog.Errorln(err, "failed to get helm release list")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while getting helm release list",
+		})
+		return
+	}
+
+	var customReleases []*schemas.Release
+	for _, rel := range releases {
+		customRelease := &schemas.Release{}
+		copier.Copy(customRelease, rel)
+		customReleases = append(customReleases, customRelease)
+	}
+
+	for _, rel := range customReleases {
+		if err := setObjectsInfo(rel); err != nil {
+			klog.Errorln(err, "Error occurs while setting Obejcts field")
+		}
+	}
+
+	response := &schemas.ReleaseResponse{}
+
+	for _, rel := range customReleases {
+		response.Release = append(response.Release, *rel)
+	}
+
+	respond(w, http.StatusOK, response)
+}
+
 func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("GetRelease")
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
-	hcm.SetClientNS(namespace)
 
+	hcm.SetClientNS(namespace)
 	releases, err := hcm.Hci.ListDeployedReleases()
 	if err != nil {
 		klog.Errorln(err, "failed to get helm release list")
@@ -89,6 +123,7 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
+	hcm.SetClientNS(namespace)
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: req.ReleaseName,
@@ -129,6 +164,7 @@ func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Req
 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
+	hcm.SetClientNS(namespace)
 	reqReleaseName := vars["release-name"]
 
 	chartSpec := helmclient.ChartSpec{
@@ -155,15 +191,6 @@ func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Req
 func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("UnInstallRelease")
 	w.Header().Set("Content-Type", "application/json")
-	// req := schemas.ReleaseRequest{}
-	// if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-	// 	klog.Errorln(err, "failed to decode request")
-	// 	respond(w, http.StatusBadRequest, &schemas.Error{
-	// 		Error:       err.Error(),
-	// 		Description: "Error occurs while decoding request",
-	// 	})
-	// 	return
-	// }
 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
@@ -189,9 +216,11 @@ func respond(w http.ResponseWriter, statusCode int, body interface{}) {
 	}
 }
 
+// Response에 생성된 object kind 및 name 추가 하기 위함
 func setObjectsInfo(rel *schemas.Release) error {
 	var temp []string
-	var objects []*runtime.RawExtension
+	// var objects []*runtime.RawExtension // 일부 releases에서 unstr로 변경 안되는 버그
+	var object map[string]interface{}
 
 	splits1 := strings.Split(rel.Manifest, "---")
 
@@ -200,42 +229,64 @@ func setObjectsInfo(rel *schemas.Release) error {
 		temp = append(temp, splits2...)
 	}
 
+	objMap := make(map[string]string)
 	for _, t := range temp {
 		if strings.Contains(t, "apiVersion") {
 			trans := []byte(strings.TrimSpace(t))
-			raw, _ := yaml.YAMLToJSON(trans) // needed to transform unstr type
-
-			obj := &runtime.RawExtension{
-				Raw: raw,
-			}
-			objects = append(objects, obj)
+			raw, _ := yaml.YAMLToJSON(trans)
+			json.Unmarshal(raw, &object)
+			objMap[object["kind"].(string)] = object["metadata"].(map[string]interface{})["name"].(string)
 		}
 	}
 
-	objMap := make(map[string]string)
-	for _, obj := range objects {
-		unstr, err := BytesToUnstructuredObject(obj)
-		if err != nil {
-			klog.Errorln(err, "failed to transform to unstr type")
-			return err
-		}
-		objMap[unstr.GetKind()] = unstr.GetName()
-	}
+	// 일부 release에서 unstr로변경 안되는 버그 있음 (체크 필요) - 우선은 위 로직으로 진행
+	// for _, t := range temp {
+	// 	if strings.Contains(t, "apiVersion") {
+	// 		trans := []byte(strings.TrimSpace(t))
+	// 		raw, _ := yaml.YAMLToJSON(trans) // needed to transform unstr type
+
+	// 		obj := &runtime.RawExtension{
+	// 			Raw: raw,
+	// 		}
+	// 		objects = append(objects, obj)
+	// 	}
+	// }
+
+	// objMap := make(map[string]string)
+	// for _, obj := range objects {
+	// 	unstr, err := BytesToUnstructuredObject(obj)
+	// 	if err != nil {
+	// 		klog.Errorln(err, "failed to transform to unstr type")
+	// 		return err
+	// 	}
+	// 	objMap[unstr.GetKind()] = unstr.GetName()
+	// }
 	rel.Objects = objMap
 	return nil
 }
 
-func BytesToUnstructuredObject(obj *runtime.RawExtension) (*unstructured.Unstructured, error) {
-	var in runtime.Object
-	var scope conversion.Scope // While not actually used within the function, need to pass in
-	if err := runtime.Convert_runtime_RawExtension_To_runtime_Object(obj, &in, scope); err != nil {
-		return nil, err
-	}
+// func BytesToUnstructuredObject(obj *runtime.RawExtension) (*unstructured.Unstructured, error) {
+// 	var in runtime.Object
+// 	var scope conversion.Scope // While not actually used within the function, need to pass in
+// 	if err := runtime.Convert_runtime_RawExtension_To_runtime_Object(obj, &in, scope); err != nil {
+// 		return nil, err
+// 	}
 
-	unstrObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(in)
-	if err != nil {
-		return nil, err
-	}
+// 	unstrObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(in)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	return &unstructured.Unstructured{Object: unstrObj}, nil
+// 	return &unstructured.Unstructured{Object: unstrObj}, nil
+// }
+
+// all-namespaces 조회를 위한 함수
+func (hcm *HelmClientManager) listDeployedReleases() ([]*release.Release, error) {
+	listClient := action.NewList(hcm.Hcs.ActionConfig)
+
+	listClient.StateMask = action.ListDeployed
+	listClient.AllNamespaces = true // 추가됨
+	listClient.All = true           // 추가됨
+
+	return listClient.Run()
 }

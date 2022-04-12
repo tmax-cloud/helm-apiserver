@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: helm-apiserver-ingress
+  namespace: helm-ns
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  labels:
+    ingress.tmaxcloud.org/name: helm-apiserver
+spec:
+  ingressClassName: tmax-cloud
+  rules:
+  - host: console.tmaxcloud.org
+    http:
+      paths:
+      - backend:
+          service:
+            name: helm-apiserver
+            port: 
+              number: 80
+        path: /helm
+        pathType: Prefix

@@ -9,9 +9,9 @@ spec:
   ports:
   - name: http
     protocol: TCP
-    port: 80
+    port: 81
     targetPort: 8081
-  type: ClusterIP # ingress 설치 기준
+  type: LoadBalancer
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -33,12 +33,18 @@ spec:
       serviceAccountName: helm-apiserver-sa
       containers:
       - name: helm-apiserver
-        image: docker.io/tmaxcloudck/helm-apiserver:0.0.0 # image name : helm-apiserver
+        image: docker.io/tmaxcloudck/helm-apiserver:test # image name : helm-apiserver
         imagePullPolicy: Always
         volumeMounts:
+          - mountPath: /tmp/cert
+            name: harbor-public
           - name: helm-apiserver-data
-            mountPath: /tmp 
+            mountPath: /tmp
       volumes:
+      - name: harbor-public
+        secret:
+          defaultMode: 420
+          secretName: harbor-public
       - name: helm-apiserver-data
         persistentVolumeClaim:
           claimName: helm-apiserver-pvc

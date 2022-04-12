@@ -56,5 +56,43 @@ func (hcm *HelmClientManager) SetClientNS(ns string) {
 	hcm.Hci = helmClient
 }
 
+func (hcm *HelmClientManager) SetClientTLS(serverName string) {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		klog.Errorln(err, "failed to get rest config")
+	}
+
+	c, _ := client.New(cfg, client.Options{})
+
+	sa, _ := internal.GetServiceAccount(c, types.NamespacedName{Name: "helm-server-test-sa", Namespace: "helm-ns"})
+	var secretName string
+
+	for _, sec := range sa.Secrets {
+		secretName = sec.Name
+	}
+
+	testSecret, _ := internal.GetSecret(c, types.NamespacedName{Name: secretName, Namespace: "helm-ns"})
+	token := testSecret.Data["token"]
+
+	opt := &helmclient.Options{
+		RepositoryCache:  repositoryCache,
+		RepositoryConfig: repositoryConfig,
+		Debug:            true,
+		Linting:          true,
+	}
+
+	cfg.BearerToken = string(token)
+	cfg.BearerTokenFile = ""
+	cfg.TLSClientConfig.CertFile = public_key
+	cfg.TLSClientConfig.ServerName = serverName
+
+	helmClient, err := helmclient.NewClientFromRestConf(&helmclient.RestConfClientOptions{Options: opt, RestConfig: cfg})
+	if err != nil {
+		klog.Errorln(err, "failed to create helm client")
+	}
+
+	hcm.Hci = helmClient
+}
+
 // [TODO]: req.header로 받은 token 값으로 교체 예정
 // func (hcm *HelmClientManager) SetClientToken(ns string) {}
