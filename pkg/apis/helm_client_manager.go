@@ -1,11 +1,13 @@
 package apis
 
 import (
+	"os"
+
 	helmclient "github.com/mittwald/go-helm-client"
 	"github.com/tmax-cloud/helm-apiserver/internal"
-	"k8s.io/apimachinery/pkg/types"
+
+	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
@@ -19,25 +21,33 @@ type HelmClientManager struct {
 	Hcs helmclient.HelmClient
 }
 
-func (hcm *HelmClientManager) SetClientNS(ns string) {
-	cfg, err := config.GetConfig()
+func (hcm *HelmClientManager) Init() {
+	hcm.Hci = internal.NewHelmClientInterface()
+	hcm.Hcs = helmclient.HelmClient{}
+}
+
+func (hcm *HelmClientManager) Init2() {
+	hcm.Hcs = *typeAssert(hcm.Hci)
+	hcm.Hci = &hcm.Hcs
+}
+
+func typeAssert(i helmclient.Client) *helmclient.HelmClient {
+	ret, ok := i.(*helmclient.HelmClient)
+	if ok {
+		return ret
+	}
+	return nil
+}
+
+func (hcm *HelmClientManager) SetClientNS(ns string) error {
+
+	cfg, err := hcm.Hcs.ActionConfig.RESTClientGetter.ToRESTConfig()
 	if err != nil {
 		klog.Errorln(err, "failed to get rest config")
 	}
 
-	c, _ := client.New(cfg, client.Options{})
-
-	sa, _ := internal.GetServiceAccount(c, types.NamespacedName{Name: "helm-server-test-sa", Namespace: "helm-ns"})
-	var secretName string
-
-	for _, sec := range sa.Secrets {
-		secretName = sec.Name
-	}
-
-	testSecret, _ := internal.GetSecret(c, types.NamespacedName{Name: secretName, Namespace: "helm-ns"})
-	token := testSecret.Data["token"]
-
-	opt := &helmclient.Options{
+	settings := hcm.Hcs.Settings
+	options := &helmclient.Options{
 		Namespace:        ns,
 		RepositoryCache:  repositoryCache,
 		RepositoryConfig: repositoryConfig,
@@ -45,15 +55,25 @@ func (hcm *HelmClientManager) SetClientNS(ns string) {
 		Linting:          true,
 	}
 
-	cfg.BearerToken = string(token)
-	cfg.BearerTokenFile = ""
+	clientGetter := helmclient.NewRESTClientGetter(ns, nil, cfg)
 
-	helmClient, err := helmclient.NewClientFromRestConf(&helmclient.RestConfClientOptions{Options: opt, RestConfig: cfg})
-	if err != nil {
-		klog.Errorln(err, "failed to create helm client")
+	if err = internal.SetEnvSettings(options, settings); err != nil {
+		klog.Errorln(err, "failed to set Env settings")
+		return err
 	}
 
-	hcm.Hci = helmClient
+	if err = hcm.Hcs.ActionConfig.Init(
+		clientGetter,
+		ns,
+		os.Getenv("HELM_DRIVER"),
+		hcm.Hcs.ActionConfig.Log,
+	); err != nil {
+		klog.Errorln(err, "failed to init action config")
+		return err
+	}
+
+	hcm.Hcs.Providers = getter.All(settings)
+	return nil
 }
 
 func (hcm *HelmClientManager) SetClientTLS(serverName string) {
@@ -62,18 +82,6 @@ func (hcm *HelmClientManager) SetClientTLS(serverName string) {
 		klog.Errorln(err, "failed to get rest config")
 	}
 
-	c, _ := client.New(cfg, client.Options{})
-
-	sa, _ := internal.GetServiceAccount(c, types.NamespacedName{Name: "helm-server-test-sa", Namespace: "helm-ns"})
-	var secretName string
-
-	for _, sec := range sa.Secrets {
-		secretName = sec.Name
-	}
-
-	testSecret, _ := internal.GetSecret(c, types.NamespacedName{Name: secretName, Namespace: "helm-ns"})
-	token := testSecret.Data["token"]
-
 	opt := &helmclient.Options{
 		RepositoryCache:  repositoryCache,
 		RepositoryConfig: repositoryConfig,
@@ -81,8 +89,8 @@ func (hcm *HelmClientManager) SetClientTLS(serverName string) {
 		Linting:          true,
 	}
 
-	cfg.BearerToken = string(token)
-	cfg.BearerTokenFile = ""
+	// cfg.BearerToken = token
+	// cfg.BearerTokenFile = ""
 	cfg.TLSClientConfig.CertFile = public_key
 	cfg.TLSClientConfig.ServerName = serverName
 
@@ -96,3 +104,24 @@ func (hcm *HelmClientManager) SetClientTLS(serverName string) {
 
 // [TODO]: req.header로 받은 token 값으로 교체 예정
 // func (hcm *HelmClientManager) SetClientToken(ns string) {}
+
+// cfg, err := config.GetConfig()
+// if err != nil {
+// 	klog.Errorln(err, "failed to get rest config")
+// }
+
+// cfg, err := hcm.Hcs.ActionConfig.RESTClientGetter.ToRESTConfig()
+// if err != nil {
+// 	klog.Errorln(err, "failed to get rest config")
+// }
+
+// opt := &helmclient.Options{
+// 	Namespace:        ns,
+// 	RepositoryCache:  repositoryCache,
+// 	RepositoryConfig: repositoryConfig,
+// 	Debug:            true,
+// 	Linting:          true,
+// }
+
+// cfg.BearerToken = token
+// cfg.BearerTokenFile = ""

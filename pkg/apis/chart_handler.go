@@ -24,9 +24,21 @@ const (
 	chartsFileSuffix = "-charts.txt"
 )
 
+// type ChartHandler struct {
+// 	router *mux.Router
+// 	Hcm    *HelmClientManager
+// }
+
+// func (c *ChartHandler) Init(router *mux.Router) {
+// 	c.router = router
+// 	c.router.HandleFunc(chartPrefix, c.Hcm.GetCharts).Methods("GET")                 // 설치 가능한 chart list 반환
+// 	c.router.HandleFunc(chartPrefix+"/{chart-name}", c.Hcm.GetCharts).Methods("GET") // (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
+// 	http.Handle("/", c.router)
+// }
+
 func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get Charts")
-	w.Header().Set("Content-Type", "application/json")
+	setResponseHeader(w)
 
 	// sync the latest charts
 	// if err := hcm.updateChartRepo(); err != nil {

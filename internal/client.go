@@ -5,7 +5,6 @@ import (
 
 	helmclient "github.com/mittwald/go-helm-client"
 	"github.com/spf13/pflag"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -40,27 +39,12 @@ func NewHelmClientInterface() helmclient.Client {
 		klog.Errorln(err, "failed to get rest config")
 	}
 
-	c, _ := client.New(cfg, client.Options{})
-
-	sa, _ := GetServiceAccount(c, types.NamespacedName{Name: "helm-server-test-sa", Namespace: "helm-ns"})
-	var secretName string
-
-	for _, sec := range sa.Secrets {
-		secretName = sec.Name
-	}
-
-	testSecret, _ := GetSecret(c, types.NamespacedName{Name: secretName, Namespace: "helm-ns"})
-	token := testSecret.Data["token"]
-
 	opt := &helmclient.Options{
 		RepositoryCache:  repositoryCache,
 		RepositoryConfig: repositoryConfig,
 		Debug:            true,
 		Linting:          true,
 	}
-
-	cfg.BearerToken = string(token)
-	cfg.BearerTokenFile = ""
 
 	helmClientInterface, err := helmclient.NewClientFromRestConf(&helmclient.RestConfClientOptions{Options: opt, RestConfig: cfg})
 	if err != nil {
@@ -83,7 +67,7 @@ func NewHelmClientStruct() helmclient.HelmClient {
 		Linting:          true,
 	}
 
-	newHelmClientStruct, err := newClientFromRestConf(&helmclient.RestConfClientOptions{Options: opt, RestConfig: cfg})
+	newHelmClientStruct, err := NewClientStructFromRestConf(&helmclient.RestConfClientOptions{Options: opt, RestConfig: cfg})
 	if err != nil {
 		klog.Errorln(err, "failed to create helm client")
 	}
@@ -92,7 +76,7 @@ func NewHelmClientStruct() helmclient.HelmClient {
 }
 
 // NewClientFromRestConf returns a new Helm client constructed with the provided REST config options.
-func newClientFromRestConf(options *helmclient.RestConfClientOptions) (helmclient.HelmClient, error) {
+func NewClientStructFromRestConf(options *helmclient.RestConfClientOptions) (helmclient.HelmClient, error) {
 	settings := cli.New()
 
 	clientGetter := newRESTClientGetter(options.Namespace, nil, options.RestConfig)
@@ -109,18 +93,26 @@ func newRESTClientGetter(namespace string, kubeConfig []byte, restConfig *rest.C
 }
 
 func newClient(options *helmclient.Options, clientGetter genericclioptions.RESTClientGetter, settings *cli.EnvSettings) (helmclient.HelmClient, error) {
-	setEnvSettings(options, settings)
+	SetEnvSettings(options, settings)
 
 	debugLog := options.DebugLog
 
 	actionConfig := new(action.Configuration)
-	actionConfig.Init(
-		clientGetter,
-		// settings.Namespace(), // all-namespace 구현을 위해 공백 처리
-		"",
-		os.Getenv("HELM_DRIVER"),
-		debugLog,
-	)
+	if options.Namespace == "" { // 모든 ns 설정
+		actionConfig.Init(
+			clientGetter,
+			"",
+			os.Getenv("HELM_DRIVER"),
+			debugLog,
+		)
+	} else {
+		actionConfig.Init(
+			clientGetter,
+			settings.Namespace(),
+			os.Getenv("HELM_DRIVER"),
+			debugLog,
+		)
+	}
 
 	return helmclient.HelmClient{
 		Settings:     settings,
@@ -130,7 +122,7 @@ func newClient(options *helmclient.Options, clientGetter genericclioptions.RESTC
 	}, nil
 }
 
-func setEnvSettings(options *helmclient.Options, settings *cli.EnvSettings) error {
+func SetEnvSettings(options *helmclient.Options, settings *cli.EnvSettings) error {
 
 	// set the namespace with this ugly workaround because cli.EnvSettings.namespace is private
 	// thank you helm!
