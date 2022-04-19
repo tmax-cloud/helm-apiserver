@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 
 	"helm.sh/helm/v3/pkg/repo"
@@ -18,18 +20,6 @@ import (
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 	// "github.com/tmax-cloud/helm-apiserver/internal"
 )
-
-// var (
-// 	server  *httptest.Server
-// 	testUrl string
-// )
-
-// func Test_Init(t *testing.T) {
-// 	rh := RepoHandler{}
-// 	rh.Init()
-// 	server = httptest.NewServer(rh.router)
-// 	testUrl = server.URL
-// }
 
 func TestAddRepos(t *testing.T) {
 
@@ -48,10 +38,7 @@ func TestAddRepos(t *testing.T) {
 	chartConfig := schemas.IndexFile{}
 	byteChartConfig, _ := json.Marshal(chartConfig)
 
-	repoConfig := schemas.Repository{
-		Name: "test",
-		Url:  "test-url",
-	}
+	repoConfig := schemas.RepositoryFile{}
 	byteRepoConfig, _ := json.Marshal(repoConfig)
 
 	_ = os.WriteFile(repositoryConfig, byteRepoConfig, 0644)
@@ -76,6 +63,65 @@ func TestAddRepos(t *testing.T) {
 				status, http.StatusOK)
 		}
 	})
+
+}
+
+func TestDeleteRepos(t *testing.T) {
+
+	ctrl := gomock.NewController(t)
+	m := mockhelmclient.NewMockClient(ctrl)
+	hcm := &HelmClientManager{
+		Hci: m,
+	}
+
+	defer ctrl.Finish()
+
+	chartConfig := schemas.IndexFile{
+		Generated: time.Now(),
+	}
+
+	byteChartConfig, _ := json.Marshal(chartConfig)
+
+	repoConfig := schemas.RepositoryFile{}
+	testRepo := schemas.Repository{
+		Name: "test",
+		Url:  "test-url",
+	}
+	repoConfig.Repositories = append(repoConfig.Repositories, testRepo)
+	byteRepoConfig, _ := json.Marshal(repoConfig)
+
+	os.Mkdir(repositoryCache, 0755)
+	os.WriteFile(repositoryConfig, byteRepoConfig, 0644)
+	os.WriteFile(repositoryCache+"/test"+indexFileSuffix, byteChartConfig, 0644)
+	os.WriteFile(repositoryCache+"/test"+chartsFileSuffix, byteChartConfig, 0644)
+
+	defer os.Remove(repositoryConfig)
+	defer os.Remove(repositoryCache + "/test" + indexFileSuffix)
+	defer os.Remove(repositoryCache + "/test" + chartsFileSuffix)
+	defer os.Remove(repositoryCache)
+
+	t.Run("check delete repos", func(t *testing.T) {
+
+		req := httptest.NewRequest("DELETE", "/helm/repos/test", nil)
+		req = mux.SetURLVars(req, map[string]string{"repo-name": "test"})
+
+		response := httptest.NewRecorder()
+		hcm.DeleteChartRepo(response, req)
+		if status := response.Code; status != http.StatusOK {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusOK)
+		}
+	})
+
+	afterByteRepoConfig, _ := os.ReadFile(repositoryConfig)
+	afterRepoConfig := &schemas.RepositoryFile{}
+	json.Unmarshal(afterByteRepoConfig, afterRepoConfig)
+
+	for _, r := range afterRepoConfig.Repositories {
+		if r.Name == "test" {
+			t.Error("test repo is not deleted")
+		}
+	}
 
 }
 

@@ -21,6 +21,20 @@ const (
 	private_key = "/tmp/cert/tls.key"
 )
 
+// type RepoHandler struct {
+// 	router *mux.Router
+// 	Hcm    *HelmClientManager
+// }
+
+// func (p *RepoHandler) Init(router *mux.Router) {
+// 	p.router = router
+// 	p.router.HandleFunc(repoPrefix, p.Hcm.GetChartRepos).Methods("GET")                     // 현재 추가된 Helm repo list 반환
+// 	p.router.HandleFunc(repoPrefix, p.Hcm.AddChartRepo).Methods("POST")                     // Helm repo 추가
+// 	p.router.HandleFunc(repoPrefix, p.Hcm.UpdateChartRepo).Methods("PUT")                   // Helm repo sync 맞추기
+// 	p.router.HandleFunc(repoPrefix+"/{repo-name}", p.Hcm.DeleteChartRepo).Methods("DELETE") // repo-name의 Repo 삭제 (index.yaml과 )
+// 	http.Handle("/", p.router)
+// }
+
 // 	repositoryCache  = "/tmp/.helmcache" // 캐시 디렉토리. 특정 chart-repo에 해당하는 chart 이름 리스트 txt파일과, 해당 repo의 index.yaml 파일이 저장됨
 // 	repositoryConfig = "/tmp/.helmrepo"  // 현재 add된 repo들 저장. go helm client 버그. 무조건 /tmp/.helmrepo 에다가 저장됨.
 
@@ -35,23 +49,23 @@ const (
 // -index.yaml 과 .helmrepo 파일의 sync가 안맞음
 // add chart repo 후, -index.yaml 파일은 있는데 같은이름이 .helmrepo 파일에 없을경우
 // .helmrepo 파일에 request로 들어온 name / url을 덮어씌워주고 마무리.
-// func init() {
-// 	klog.Infoln("Add default Chart repo")
-// 	chartRepo := repo.Entry{
-// 		Name: "tmax-stable",
-// 		URL:  "https://tmax-cloud.github.io/helm-charts/stable",
-// 	}
 
-// 	hci := internal.NewHelmClientInterface()
-// 	if err := hci.AddOrUpdateChartRepo(chartRepo); err != nil {
-// 		klog.Errorln(err, "failed to add default tmax chart repo")
-// 		return
-// 	}
-// }
+func (hcm *HelmClientManager) AddDefaultRepo() {
+	klog.Infoln("Add default Chart repo")
+	chartRepo := repo.Entry{
+		Name: "tmax-stable",
+		URL:  "https://tmax-cloud.github.io/helm-charts/stable",
+	}
+
+	if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
+		klog.Errorln(err, "failed to add default tmax chart repo")
+		return
+	}
+}
 
 func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Add ChartRepo")
-	w.Header().Set("Content-Type", "application/json")
+	setResponseHeader(w)
 	req := &schemas.RepoRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		klog.Errorln(err, "failed to decode request")
@@ -153,7 +167,7 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 
 func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get chartRepos")
-	w.Header().Set("Content-Type", "application/json")
+	setResponseHeader(w)
 
 	// Read repositoryConfig File which contains repo Info list
 	repoList, err := readRepoList()
@@ -175,7 +189,7 @@ func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Reque
 
 func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Delete chartRepos")
-	w.Header().Set("Content-Type", "application/json")
+	setResponseHeader(w)
 
 	vars := mux.Vars(r)
 	reqRepoName := vars["repo-name"]
@@ -232,7 +246,7 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 
 func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Update ChartRepo")
-	w.Header().Set("Content-Type", "application/json")
+	setResponseHeader(w)
 
 	// Read repositoryConfig File which contains repo Info list
 	repoList, err := readRepoList()

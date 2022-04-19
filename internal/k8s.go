@@ -47,11 +47,3 @@ func GetSecret(c client.Client, name types.NamespacedName) (*corev1.Secret, erro
 	}
 	return secret, nil
 }
-
-func UpdateSecret(c client.Client, secret *corev1.Secret) error {
-
-	if err := c.Update(context.TODO(), secret); err != nil {
-		return err
-	}
-	return nil
-}
