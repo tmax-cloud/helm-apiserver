@@ -5,13 +5,13 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/tmax-cloud/helm-apiserver/internal"
 	"github.com/tmax-cloud/helm-apiserver/pkg/apis"
 	"k8s.io/klog"
 )
 
 const (
-	helmPrefix    = "/helm"
+	helmPrefix = "/helm"
+
 	releasePrefix = "/releases"
 	chartPrefix   = "/charts"
 	repoPrefix    = "/repos"
@@ -21,11 +21,14 @@ const (
 
 func main() {
 	klog.Infoln("initializing server....")
+
 	router := mux.NewRouter()
 	apiRouter := router.PathPrefix(helmPrefix).Subrouter()
 
-	// Create HelmClientManager
-	hcm := apis.HelmClientManager{Hci: internal.NewHelmClientInterface(), Hcs: internal.NewHelmClientStruct()}
+	hcm := &apis.HelmClientManager{}
+	hcm.Init()
+	hcm.Init2()          // for type assertion
+	hcm.AddDefaultRepo() // Add default repo
 
 	apiRouter.HandleFunc(chartPrefix, hcm.GetCharts).Methods("GET")                 // 설치 가능한 chart list 반환
 	apiRouter.HandleFunc(chartPrefix+"/{chart-name}", hcm.GetCharts).Methods("GET") // (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
