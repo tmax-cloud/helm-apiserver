@@ -17,16 +17,9 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 )
 
-var (
-	hcm = &HelmClientManager{}
-	// server  *httptest.Server
-	// testUrl string
-)
-
 func TestGetReleases(t *testing.T) {
 
-	hcm.Init()
-	hcm.Init2()
+	hcm := NewHelmClientManager()
 
 	var releases []*release.Release
 	ctrl := gomock.NewController(t)
@@ -53,8 +46,7 @@ func TestGetReleases(t *testing.T) {
 
 func TestInstallReleases(t *testing.T) {
 
-	hcm.Init()
-	hcm.Init2()
+	hcm := NewHelmClientManager()
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: "test-release",
@@ -99,8 +91,7 @@ func TestInstallReleases(t *testing.T) {
 
 func TestUnInstallReleases(t *testing.T) {
 
-	hcm.Init()
-	hcm.Init2()
+	hcm := NewHelmClientManager()
 
 	ctrl := gomock.NewController(t)
 	m := mockhelmclient.NewMockClient(ctrl)

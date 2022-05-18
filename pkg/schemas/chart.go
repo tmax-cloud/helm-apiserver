@@ -8,7 +8,7 @@ import (
 
 type ChartResponse struct {
 	IndexFile IndexFile              `json:"indexfile,omitempty"`
-	Values    map[string]interface{} `json:"values,omitempty"` // UI 확인 필요
+	Values    map[string]interface{} `json:"values,omitempty"`
 }
 
 type IndexFile struct {
@@ -29,11 +29,13 @@ type ChartVersions []*ChartVersion
 // ChartVersion represents a chart entry in the IndexFile
 type ChartVersion struct {
 	*chart.Metadata
-	URLs    []string   `json:"urls"`
-	Created time.Time  `json:"created,omitempty"`
-	Removed bool       `json:"removed,omitempty"`
-	Digest  string     `json:"digest,omitempty"`
-	Repo    Repository `json:"repo,omitempty"`
+	URLs    []string  `json:"urls"`
+	Created time.Time `json:"created,omitempty"`
+	Removed bool      `json:"removed,omitempty"`
+	Digest  string    `json:"digest,omitempty"`
+
+	// 직접 추가한 field
+	Repo Repository `json:"repo,omitempty"`
 
 	// ChecksumDeprecated is deprecated in Helm 3, and therefore ignored. Helm 3 replaced
 	// this with Digest. However, with a strict YAML parser enabled, a field must be

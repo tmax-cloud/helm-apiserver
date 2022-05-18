@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
@@ -77,7 +76,7 @@ func TestDeleteRepos(t *testing.T) {
 	defer ctrl.Finish()
 
 	chartConfig := schemas.IndexFile{
-		Generated: time.Now(),
+		APIVersion: "test",
 	}
 
 	byteChartConfig, _ := json.Marshal(chartConfig)

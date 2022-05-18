@@ -10,7 +10,7 @@ metadata:
 spec:
   ingressClassName: tmax-cloud
   rules:
-  - host: console.tmaxcloud.org
+  - host: {consoleHost} # HyperCloud console host
     http:
       paths:
       - backend:
