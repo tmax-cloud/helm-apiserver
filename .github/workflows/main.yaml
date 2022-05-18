@@ -1,0 +1,39 @@
+name: helm-apiserver
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+  pull_request:
+jobs:
+  test_unit:
+   runs-on: ubuntu-18.04
+   steps:
+     - uses: actions/checkout@v2
+     - name: unit test
+       run: make test-unit
+  test_lint:
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: lint test
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          go get -u golang.org/x/lint/golint 
+          make test-lint
+  deploy-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [test_lint, test_unit]
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: build and push 
+        run: |
+          docker login -u=tmaxcloudck -p=${{ secrets.DOCKER_HUB_PASSWORD }}
+          REPO=tmaxcloudck/helm-apiserver
+          IMG=${REPO}:${GITHUB_REF#refs/tags/}
+          docker build . -t ${IMG}
+          docker tag ${IMG} ${REPO}:latest
+          docker push ${IMG}
+          docker push ${REPO}:latest
