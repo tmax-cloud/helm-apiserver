@@ -17,6 +17,7 @@ build:
 push:
 	docker push $(HS_IMG)
 
+
 # Custom target for Helm API server
 .PHONY: test-lint test-unit
 
