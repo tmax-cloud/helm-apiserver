@@ -9,6 +9,8 @@
 - kubectl apply -f pvc.yaml ([파일](./deploy/pvc.yaml))
 3. Helm-apiserver 생성
 - kubectl apply -f deploy.yaml ([파일](./deploy/deploy.yaml))
+4. HyperCloud API gateway사용을 위한 ingress 생성
+- kubectl apply -f ingress.yaml ([파일](./deploy/ingress.yaml))
 
 ## Helm-apiserver API 요약
 **자세한 내용은 [API docs 참조](https://documenter.getpostman.com/view/16732594/UVeGsSUr)**
