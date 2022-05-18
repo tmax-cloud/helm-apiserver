@@ -23,7 +23,7 @@ push:
 
 # Test code lint
 test-lint:
-	#golangci-lint run ./... -v -E gofmt --timeout 1h0m0s
+# golangci-lint run ./... -v -E gofmt --timeout 1h0m0s
 	golint ./...
 
 # Unit test

@@ -25,8 +25,9 @@ func TestAddRepos(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	m := mockhelmclient.NewMockClient(ctrl)
 	m.EXPECT().AddOrUpdateChartRepo(repo.Entry{
-		Name: "test",
-		URL:  "test-url",
+		Name:                  "test",
+		URL:                   "test-url",
+		InsecureSkipTLSverify: true, // for-test
 	}).Return(nil)
 	hcm := HelmClientManager{
 		Hci: m,
