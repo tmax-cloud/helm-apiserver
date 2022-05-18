@@ -45,6 +45,8 @@ type Release struct {
 	Namespace string `json:"namespace,omitempty"`
 	// Labels of the release.
 	// Disabled encoding into Json cause labels are stored in storage driver metadata field.
-	Labels  map[string]string `json:"-"`
+	Labels map[string]string `json:"-"`
+
+	// 직접 추가한 field
 	Objects map[string]string `json:"objects,omitempty"`
 }

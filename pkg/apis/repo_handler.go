@@ -9,6 +9,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
 	"helm.sh/helm/v3/pkg/repo"
+	"helm.sh/helm/v3/pkg/time"
 	"k8s.io/klog"
 
 	// "github.com/tmax-cloud/helm-apiserver/internal"
@@ -21,27 +22,6 @@ const (
 	private_key = "/tmp/cert/tls.key"
 )
 
-// type RepoHandler struct {
-// 	router *mux.Router
-// 	Hcm    *HelmClientManager
-// }
-
-// func (p *RepoHandler) Init(router *mux.Router) {
-// 	p.router = router
-// 	p.router.HandleFunc(repoPrefix, p.Hcm.GetChartRepos).Methods("GET")                     // 현재 추가된 Helm repo list 반환
-// 	p.router.HandleFunc(repoPrefix, p.Hcm.AddChartRepo).Methods("POST")                     // Helm repo 추가
-// 	p.router.HandleFunc(repoPrefix, p.Hcm.UpdateChartRepo).Methods("PUT")                   // Helm repo sync 맞추기
-// 	p.router.HandleFunc(repoPrefix+"/{repo-name}", p.Hcm.DeleteChartRepo).Methods("DELETE") // repo-name의 Repo 삭제 (index.yaml과 )
-// 	http.Handle("/", p.router)
-// }
-
-// 	repositoryCache  = "/tmp/.helmcache" // 캐시 디렉토리. 특정 chart-repo에 해당하는 chart 이름 리스트 txt파일과, 해당 repo의 index.yaml 파일이 저장됨
-// 	repositoryConfig = "/tmp/.helmrepo"  // 현재 add된 repo들 저장. go helm client 버그. 무조건 /tmp/.helmrepo 에다가 저장됨.
-
-//  indexFileSuffix  = "-index.yaml"
-// 	chartsFileSuffix = "-charts.txt"
-// )
-
 // [Plan A]
 // Helm cache file or dir 을 비워주고 add chart repo
 
@@ -52,6 +32,17 @@ const (
 
 func (hcm *HelmClientManager) AddDefaultRepo() {
 	klog.Infoln("Add default Chart repo")
+
+	// Read repositoryConfig File which contains repo Info list
+	repoList, _ := readRepoList()
+
+	// store repo names into repoNames slice
+	for _, repoInfo := range repoList.Repositories {
+		if repoInfo.Name == "tmax-stable" {
+			return
+		}
+	}
+
 	chartRepo := repo.Entry{
 		Name: "tmax-stable",
 		URL:  "https://tmax-cloud.github.io/helm-charts/stable",
@@ -76,44 +67,40 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// init 으로 tmax-repo 기본으로 추가하면 괜찮은데 안하면 쓰면안됨
-	// // Read repositoryConfig File which contains repo Info list
-	// repoList, err := readRepoList()
-	// if err != nil {
-	// 	respond(w, http.StatusBadRequest, &schemas.Error{
-	// 		Error:       err.Error(),
-	// 		Description: "Error occurs while reading repository list file",
-	// 	})
-	// 	return
-	// }
+	// Read repositoryConfig File which contains repo Info list
+	repoList, err := readRepoList()
+	if err != nil {
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while reading repository list file",
+		})
+		return
+	}
 
-	// var repoNames []string
-	// // store repo names into repoNames slice
-	// for _, repoInfo := range repoList.Repositories {
-	// 	repoNames = append(repoNames, repoInfo.Name)
-	// }
+	var repoNames []string
+	// store repo names into repoNames slice
+	for _, repoInfo := range repoList.Repositories {
+		repoNames = append(repoNames, repoInfo.Name)
+	}
 
-	// // Check if req repoName is already exist
-	// for _, repoName := range repoNames {
-	// 	if req.Name == repoName {
-	// 		klog.Errorln(req.Name + " name repository is already exist")
-	// 		respond(w, http.StatusBadRequest, &schemas.Error{
-	// 			Description: req.Name + " name repository is already exist",
-	// 		})
-	// 		return
-	// 	}
-	// }
+	// Check if req repoName is already exist
+	for _, repoName := range repoNames {
+		if req.Name == repoName {
+			klog.Errorln(req.Name + " name repository is already exist")
+			respond(w, http.StatusBadRequest, &schemas.Error{
+				Description: req.Name + " name repository is already exist",
+			})
+			return
+		}
+	}
 
-	// TODO : Private Repository도 지원해줘야 함
 	chartRepo := repo.Entry{
 		Name: req.Name,
 		URL:  req.RepoURL,
-		// Username:              "root",
-		// Password:              "xGKHTDxr3T3V6yPSDqKq",
 		// CAFile:                ca_crt,
 		// CertFile:              public_key,
 		// KeyFile:               private_key,
-		// InsecureSkipTLSverify: true,
+		InsecureSkipTLSverify: true,
 	}
 
 	// hcm.SetClientTLS(req.RepoURL)
@@ -145,6 +132,7 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 	}
 
 	// -index.yaml 파일과 .helmrepo 파일 sync
+	// -index.yaml 파일은 생기는데 .helmrepo 파일 update 안되는 버그 있음
 	if sync {
 		afterRepoList.Repositories = append(afterRepoList.Repositories, schemas.Repository{
 			Name: req.Name,
@@ -263,7 +251,6 @@ func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Req
 		chartRepo.Name = repo.Name
 		chartRepo.URL = repo.Url
 
-		// TODO : Private Repository도 지원해줘야 함
 		if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
 			klog.Errorln(err, "failed to update chart repo")
 			respond(w, http.StatusBadRequest, &schemas.Error{
@@ -279,6 +266,7 @@ func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Req
 }
 
 func writeRepoList(repoList *schemas.RepositoryFile) error {
+	repoList.Generated = time.Now() // repo 삭제 후 발생하는 버그 방지
 	newRepoListFile, err := json.Marshal(repoList)
 	if err != nil {
 		klog.Errorln(err, "failed to marshal repo list")

@@ -8,7 +8,6 @@ import (
 
 	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 const (
@@ -21,14 +20,13 @@ type HelmClientManager struct {
 	Hcs helmclient.HelmClient
 }
 
-func (hcm *HelmClientManager) Init() {
-	hcm.Hci = internal.NewHelmClientInterface()
-	hcm.Hcs = helmclient.HelmClient{}
-}
-
-func (hcm *HelmClientManager) Init2() {
-	hcm.Hcs = *typeAssert(hcm.Hci)
-	hcm.Hci = &hcm.Hcs
+func NewHelmClientManager() *HelmClientManager {
+	hci := internal.NewHelmClientInterface()
+	hcs := *typeAssert(hci)
+	return &HelmClientManager{
+		Hci: &hcs,
+		Hcs: hcs,
+	}
 }
 
 func typeAssert(i helmclient.Client) *helmclient.HelmClient {
@@ -45,6 +43,10 @@ func (hcm *HelmClientManager) SetClientNS(ns string) error {
 	if err != nil {
 		klog.Errorln(err, "failed to get rest config")
 	}
+
+	// [TODO] 나머지 테스트 완료 후 활성화
+	// cfg.BearerToken = "BearerToekn"
+	// cfg.BearerTokenFile = ""
 
 	settings := hcm.Hcs.Settings
 	options := &helmclient.Options{
@@ -76,31 +78,70 @@ func (hcm *HelmClientManager) SetClientNS(ns string) error {
 	return nil
 }
 
-func (hcm *HelmClientManager) SetClientTLS(serverName string) {
-	cfg, err := config.GetConfig()
+func (hcm *HelmClientManager) SetClientTLS(serverName string) error {
+	cfg, err := hcm.Hcs.ActionConfig.RESTClientGetter.ToRESTConfig()
 	if err != nil {
 		klog.Errorln(err, "failed to get rest config")
 	}
+	cfg.TLSClientConfig.CertFile = public_key
+	cfg.TLSClientConfig.ServerName = serverName
 
-	opt := &helmclient.Options{
+	settings := hcm.Hcs.Settings
+	options := &helmclient.Options{
 		RepositoryCache:  repositoryCache,
 		RepositoryConfig: repositoryConfig,
 		Debug:            true,
 		Linting:          true,
 	}
 
-	// cfg.BearerToken = token
-	// cfg.BearerTokenFile = ""
-	cfg.TLSClientConfig.CertFile = public_key
-	cfg.TLSClientConfig.ServerName = serverName
+	clientGetter := helmclient.NewRESTClientGetter("", nil, cfg)
 
-	helmClient, err := helmclient.NewClientFromRestConf(&helmclient.RestConfClientOptions{Options: opt, RestConfig: cfg})
-	if err != nil {
-		klog.Errorln(err, "failed to create helm client")
+	if err = internal.SetEnvSettings(options, settings); err != nil {
+		klog.Errorln(err, "failed to set Env settings")
+		return err
+
 	}
 
-	hcm.Hci = helmClient
+	if err = hcm.Hcs.ActionConfig.Init(
+		clientGetter,
+		"",
+		os.Getenv("HELM_DRIVER"),
+		hcm.Hcs.ActionConfig.Log,
+	); err != nil {
+		klog.Errorln(err, "failed to init action config")
+		return err
+	}
+
+	hcm.Hcs.Providers = getter.All(settings)
+	return nil
+
 }
+
+// func (hcm *HelmClientManager) SetClientTLS(serverName string) {
+// 	cfg, err := config.GetConfig()
+// 	if err != nil {
+// 		klog.Errorln(err, "failed to get rest config")
+// 	}
+
+// 	opt := &helmclient.Options{
+// 		RepositoryCache:  repositoryCache,
+// 		RepositoryConfig: repositoryConfig,
+// 		Debug:            true,
+// 		Linting:          true,
+// 	}
+
+// 	// cfg.BearerToken = token
+// 	// cfg.BearerTokenFile = ""
+// 	cfg.TLSClientConfig.CertFile = public_key
+// 	cfg.TLSClientConfig.ServerName = serverName
+
+// 	helmClient, err := helmclient.NewClientFromRestConf(&helmclient.RestConfClientOptions{Options: opt, RestConfig: cfg})
+// 	if err != nil {
+// 		klog.Errorln(err, "failed to create helm client")
+// 	}
+
+// 	hcm.Hci = helmClient
+// }
 
 // [TODO]: req.header로 받은 token 값으로 교체 예정
 // func (hcm *HelmClientManager) SetClientToken(ns string) {}

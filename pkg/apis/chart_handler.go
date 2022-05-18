@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/ghodss/yaml"
@@ -24,30 +25,18 @@ const (
 	chartsFileSuffix = "-charts.txt"
 )
 
-// type ChartHandler struct {
-// 	router *mux.Router
-// 	Hcm    *HelmClientManager
-// }
-
-// func (c *ChartHandler) Init(router *mux.Router) {
-// 	c.router = router
-// 	c.router.HandleFunc(chartPrefix, c.Hcm.GetCharts).Methods("GET")                 // 설치 가능한 chart list 반환
-// 	c.router.HandleFunc(chartPrefix+"/{chart-name}", c.Hcm.GetCharts).Methods("GET") // (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
-// 	http.Handle("/", c.router)
-// }
-
 func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get Charts")
 	setResponseHeader(w)
 
 	// sync the latest charts
-	// if err := hcm.updateChartRepo(); err != nil {
-	// 	respond(w, http.StatusBadRequest, &schemas.Error{
-	// 		Error:       err.Error(),
-	// 		Description: "Error occurs while sync the latest charts",
-	// 	})
-	// 	return
-	// }
+	if err := hcm.updateChartRepo(); err != nil {
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while sync the latest charts",
+		})
+		return
+	}
 
 	// Read repositoryConfig File which contains repo Info list
 	repoList, err := readRepoList()
@@ -163,23 +152,41 @@ func (hcm *HelmClientManager) GetCharts(w http.ResponseWriter, r *http.Request) 
 	onlyOneEntries := make(map[string]schemas.ChartVersions)
 	var chartVersions []*schemas.ChartVersion
 	var reqURL string
+	var chartPath string
 
+	// [TODO] 특정 chart GET 할 경우 url 변경해주기
 	if exist {
 		for _, chart := range allEntries[reqChartName] {
 			if chart.Name == reqChartName {
-				chartVersions = append(chartVersions, chart)
-				onlyOneEntries[reqChartName] = chartVersions
 
+				chartPaths := []string{}
 				// get reqURL value for values.yaml
 				for _, url := range chart.URLs {
 					reqURL = url
+					chartPath = url
 				}
+
+				// default index 파일은 필요함
+				if !strings.Contains(chartPath, chart.Repo.Url) {
+					chartPath = chart.Repo.Url + "/" + reqURL
+					chartPaths = append(chartPaths, chartPath)
+					chart.URLs = chartPaths
+				}
+
+				chartVersions = append(chartVersions, chart)
+				onlyOneEntries[reqChartName] = chartVersions
+
 			}
 		}
 		index.Entries = onlyOneEntries
 		response.IndexFile = *index
 
-		helmChart, _, err := hcm.getChart(reqURL, &action.ChartPathOptions{})
+		// getChart 후 /tmp/.helmcache/ 에 파일 저장됨
+		helmChart, filePath, err := hcm.getChart(chartPath, &action.ChartPathOptions{
+			InsecureSkipTLSverify: true,
+		})
+
+		defer os.Remove(filePath)
 
 		if helmChart == nil {
 			klog.Errorln(err, "failed to get chart: "+reqChartName+" info")
@@ -235,6 +242,7 @@ func (hcm *HelmClientManager) getChart(chartName string, chartPathOptions *actio
 
 func readRepoIndex(repoName string) (index *schemas.IndexFile, err error) {
 	index = &schemas.IndexFile{}
+
 	indexFile, err := ioutil.ReadFile(repositoryCache + "/" + repoName + indexFileSuffix)
 	if err != nil {
 		klog.Errorln(err, "failed to read index.yaml file of "+repoName)
@@ -269,7 +277,7 @@ func readRepoList() (repoList *schemas.RepositoryFile, err error) {
 	return repoList, nil
 }
 
-// [TODO] : Private repo별로 TLS client 세팅 해줘야함...
+// [TODO] : 전체 말고 차트 불러오는 repo만 update로 변경?
 func (hcm *HelmClientManager) updateChartRepo() error {
 	klog.Infoln("Sync the latest chart info")
 
@@ -284,6 +292,10 @@ func (hcm *HelmClientManager) updateChartRepo() error {
 	for _, repo := range repoList.Repositories {
 		chartRepo.Name = repo.Name
 		chartRepo.URL = repo.Url
+		// chartRepo.CAFile = repo.CaFile
+		// chartRepo.KeyFile = repo.KeyFile
+		// chartRepo.CertFile = repo.CertFile
+		chartRepo.InsecureSkipTLSverify = true
 
 		if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
 			klog.Errorln(err, "failed to update chart repo")

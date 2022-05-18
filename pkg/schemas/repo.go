@@ -31,8 +31,16 @@ type Repository struct {
 	UserName                 string `json:"username,omitempty"`
 }
 
+type RepoClientRequest struct {
+	Name      string `json:"name,omitempty"`
+	Auto_init bool   `json:"auto_init,omitempty"`
+}
 
+type GithubPageRequest struct {
+	Source Source `json:"source,omitempty"`
+}
 
-
-
-
+type Source struct {
+	Branch string `json:"branch,omitempty"`
+	Path   string `json:"path,omitempty"`
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 
 	"strings"
 
@@ -18,32 +19,18 @@ import (
 	helmclient "github.com/mittwald/go-helm-client"
 )
 
-// type ReleaseHandler struct {
-// 	router *mux.Router
-// 	Hcm    *HelmClientManager
-// }
-
-// func (r *ReleaseHandler) Init(router *mux.Router) {
-// 	r.router = router
-// 	r.router.HandleFunc(allNamespaces+releasePrefix, r.Hcm.GetAllReleases).Methods("GET") // all-namespaces 릴리즈 반환
-// 	r.router.HandleFunc(nsPrefix+releasePrefix, r.Hcm.GetReleases).Methods("GET")         // 설치된 release list 반환 (path-variable : 특정 release 정보 반환) helm client deployed releaselist 활용
-// 	r.router.HandleFunc(nsPrefix+releasePrefix+"/{release-name}", r.Hcm.GetReleases).Methods("GET")
-// 	r.router.HandleFunc(nsPrefix+releasePrefix, r.Hcm.InstallRelease).Methods("POST")                       // helm release 생성
-// 	r.router.HandleFunc(nsPrefix+releasePrefix+"/{release-name}", r.Hcm.UnInstallRelease).Methods("DELETE") // 설치된 release 전부 삭제 (path-variable : 특정 release 삭제)
-// 	r.router.HandleFunc(nsPrefix+releasePrefix+"/{release-name}", r.Hcm.RollbackRelease).Methods("PATCH")   // 일단 미사용 (update / rollback)
-// 	http.Handle("/", r.router)
-// }
-
 // Get all-namespace 구현
 func (hcm *HelmClientManager) GetAllReleases(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get All Releases")
 	setResponseHeader(w)
 
+	// All NameSpace 설정
 	if err := hcm.SetClientNS(""); err != nil {
 		klog.Errorln("Error occurs while setting namespace")
 		return
 	}
 
+	// Release List 받아오기
 	releases, err := hcm.Hci.ListDeployedReleases()
 	if err != nil {
 		klog.Errorln(err, "failed to get helm release list")
@@ -54,6 +41,7 @@ func (hcm *HelmClientManager) GetAllReleases(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Releases의 Objects 필드 추가를 위해 customReleases 사용
 	var customReleases []*schemas.Release
 	for _, rel := range releases {
 		customRelease := &schemas.Release{}
@@ -61,15 +49,26 @@ func (hcm *HelmClientManager) GetAllReleases(w http.ResponseWriter, r *http.Requ
 		customReleases = append(customReleases, customRelease)
 	}
 
+	// customReleases에 Objects 필드 값 추가
 	for _, rel := range customReleases {
 		if err := setObjectsInfo(rel); err != nil {
 			klog.Errorln(err, "Error occurs while setting Obejcts field")
 		}
 	}
 
-	response := &schemas.ReleaseResponse{}
+	// search releases
+	var responseReleases []*schemas.Release
+	query, _ := url.ParseQuery(r.URL.RawQuery)
+	_, search := query["search"]
+	if search {
+		searcher := query.Get("search")
+		responseReleases = searchRelease(searcher, customReleases)
+	} else {
+		responseReleases = customReleases
+	}
 
-	for _, rel := range customReleases {
+	response := &schemas.ReleaseResponse{}
+	for _, rel := range responseReleases {
 		response.Release = append(response.Release, *rel)
 	}
 
@@ -79,6 +78,8 @@ func (hcm *HelmClientManager) GetAllReleases(w http.ResponseWriter, r *http.Requ
 func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("GetRelease")
 	setResponseHeader(w)
+	// tokenTest := r.Header.Get("authorization")
+	// klog.Info(tokenTest)
 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
@@ -124,7 +125,18 @@ func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	for _, rel := range customReleases {
+	// search releases
+	var responseReleases []*schemas.Release
+	query, _ := url.ParseQuery(r.URL.RawQuery)
+	_, search := query["search"]
+	if search {
+		searcher := query.Get("search")
+		responseReleases = searchRelease(searcher, customReleases)
+	} else {
+		responseReleases = customReleases
+	}
+
+	for _, rel := range responseReleases {
 		response.Release = append(response.Release, *rel)
 	}
 
@@ -151,7 +163,6 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 		klog.Errorln("Error occurs while setting namespace")
 		return
 	}
-	klog.Info(namespace)
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: req.ReleaseName,
@@ -163,7 +174,7 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 		Wait:        false,
 	}
 
-	// [TODO] ChartIsInstalled check 해야 하나?
+	// [TODO] Release 중복 이름 check
 	if _, err := hcm.Hci.InstallOrUpgradeChart(context.Background(), &chartSpec); err != nil {
 		klog.Errorln(err, "failed to install release")
 		respond(w, http.StatusBadRequest, &schemas.Error{
@@ -252,12 +263,13 @@ func respond(w http.ResponseWriter, statusCode int, body interface{}) {
 	}
 }
 
+// CORS 에러로 인해 header 추가 21.04.19
 func setResponseHeader(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
-	w.Header().Set("Access-Control-Max-Age", "3600")
-	w.Header().Set("Access-Control-Allow-Headers", "Origin,Accept,X-Requested-With,Content-Type,Access-Control-Request-Method,Access-Control-Request-Headers,Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS") // Method 각각 써줘야 할것 같음
+	w.Header().Set("Access-Control-Allow-Headers", "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version")
 
 }
 
@@ -324,3 +336,14 @@ func setObjectsInfo(rel *schemas.Release) error {
 
 // 	return &unstructured.Unstructured{Object: unstrObj}, nil
 // }
+
+// Releases의 이름 or 참조한 차트 이름으로 검색
+func searchRelease(searcher string, input []*schemas.Release) (output []*schemas.Release) {
+	var filtered []*schemas.Release
+	for _, i := range input {
+		if strings.Contains(i.Name, searcher) || strings.Contains(i.Chart.Name(), searcher) {
+			filtered = append(filtered, i)
+		}
+	}
+	return filtered
+}
