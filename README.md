@@ -2,6 +2,10 @@
 
 > Helm API server for HyperCloud Service
 
+## 개요
+HyperCloud에서 Kubernetes package manager인 Helm service를 쉽게 사용할 수 있도록 지원하는 API server.
+Helm Chart가 포함된 Helm Repository를 등록 후 차트 조회가 가능하며, 해당 차트를 사용하여 릴리즈를 생성함으로써 차트를 설치한다.
+
 ## Install helm-apiserver
 1. Helm-apiserver를 설치하기 위한 네임스페이스를 생성
 - kubectl create namespace helm-ns
