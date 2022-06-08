@@ -18,6 +18,7 @@ const (
 	repositoryPrefix = "/repository"
 	nsPrefix         = "/ns/{ns-name}"
 	allNamespaces    = "/all-namespaces"
+	versionPrefix    = "/versions/{version}"
 )
 
 func main() {
@@ -29,12 +30,19 @@ func main() {
 	hcm := apis.NewHelmClientManager()
 	hcm.AddDefaultRepo() // Add default repo
 
+	chartHandler := apis.NewChartHandler(hcm)
+
 	// Repository Test
 	apiRouter.HandleFunc(repositoryPrefix, hcm.CreateChartRepo).Methods("POST")
 
 	// Chart API
-	apiRouter.HandleFunc(chartPrefix, hcm.GetCharts).Methods("GET")                 // 설치 가능한 chart list 반환
-	apiRouter.HandleFunc(chartPrefix+"/{chart-name}", hcm.GetCharts).Methods("GET") // (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
+	apiRouter.HandleFunc(chartPrefix, chartHandler.GetCharts).Methods("GET")                 // 설치 가능한 chart list 반환
+	apiRouter.HandleFunc(chartPrefix+"/{chart-name}", chartHandler.GetCharts).Methods("GET") // (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
+	apiRouter.HandleFunc(chartPrefix+"/{chart-name}"+versionPrefix, chartHandler.GetCharts).Methods("GET")
+
+	// // Chart API
+	// apiRouter.HandleFunc(chartPrefix, hcm.GetCharts).Methods("GET")                 // 설치 가능한 chart list 반환
+	// apiRouter.HandleFunc(chartPrefix+"/{chart-name}", hcm.GetCharts).Methods("GET") // (query : category 분류된 chart list반환 / path-varaible : 특정 chart data + value.yaml 반환)
 
 	// Release API
 	apiRouter.HandleFunc(allNamespaces+releasePrefix, hcm.GetAllReleases).Methods("GET") // all-namespaces 릴리즈 반환
@@ -45,10 +53,10 @@ func main() {
 	apiRouter.HandleFunc(nsPrefix+releasePrefix+"/{release-name}", hcm.RollbackRelease).Methods("PATCH")   // 일단 미사용 (update / rollback)
 
 	// Repo API
-	apiRouter.HandleFunc(repoPrefix, hcm.GetChartRepos).Methods("GET")                     // 현재 추가된 Helm repo list 반환
-	apiRouter.HandleFunc(repoPrefix, hcm.AddChartRepo).Methods("POST")                     // Helm repo 추가
-	apiRouter.HandleFunc(repoPrefix, hcm.UpdateChartRepo).Methods("PUT")                   // Helm repo sync 맞추기
-	apiRouter.HandleFunc(repoPrefix+"/{repo-name}", hcm.DeleteChartRepo).Methods("DELETE") // repo-name의 Repo 삭제 (index.yaml과 )
+	apiRouter.HandleFunc(repoPrefix, chartHandler.GetChartRepos).Methods("GET")                     // 현재 추가된 Helm repo list 반환
+	apiRouter.HandleFunc(repoPrefix, chartHandler.AddChartRepo).Methods("POST")                     // Helm repo 추가
+	apiRouter.HandleFunc(repoPrefix, chartHandler.UpdateChartRepo).Methods("PUT")                   // Helm repo sync 맞추기
+	apiRouter.HandleFunc(repoPrefix+"/{repo-name}", chartHandler.DeleteChartRepo).Methods("DELETE") // repo-name의 Repo 삭제 (index.yaml과 )
 
 	http.Handle("/", router)
 

@@ -9,6 +9,7 @@ import (
 type ChartResponse struct {
 	IndexFile IndexFile              `json:"indexfile,omitempty"`
 	Values    map[string]interface{} `json:"values,omitempty"`
+	Versions  []string               `json:"versions,omitempty"`
 }
 
 type IndexFile struct {

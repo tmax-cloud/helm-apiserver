@@ -18,5 +18,5 @@ spec:
             name: helm-apiserver
             port: 
               number: 80
-        path: /helm
+        path: /
         pathType: Prefix
