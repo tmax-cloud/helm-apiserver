@@ -54,7 +54,7 @@ func (hcm *HelmClientManager) AddDefaultRepo() {
 	}
 }
 
-func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Request) {
+func (ch *ChartHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Add ChartRepo")
 	setResponseHeader(w)
 	req := &schemas.RepoRequest{}
@@ -105,7 +105,7 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 
 	// hcm.SetClientTLS(req.RepoURL)
 
-	if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
+	if err := ch.hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
 		klog.Errorln(err, "failed to add chart repo")
 		respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -149,11 +149,13 @@ func (hcm *HelmClientManager) AddChartRepo(w http.ResponseWriter, r *http.Reques
 
 	}
 
+	ch.UpdateChartHandler()
+
 	klog.Infoln(req.Name + " repo is successfully added")
 	respond(w, http.StatusOK, req.Name+" repo is successfully added")
 }
 
-func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Request) {
+func (ch *ChartHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get chartRepos")
 	setResponseHeader(w)
 
@@ -175,7 +177,7 @@ func (hcm *HelmClientManager) GetChartRepos(w http.ResponseWriter, r *http.Reque
 	respond(w, http.StatusOK, response)
 }
 
-func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
+func (ch *ChartHandler) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Delete chartRepos")
 	setResponseHeader(w)
 
@@ -228,11 +230,13 @@ func (hcm *HelmClientManager) DeleteChartRepo(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	ch.UpdateChartHandler()
+
 	klog.Infoln(reqRepoName + " is successfully removed")
 	respond(w, http.StatusOK, reqRepoName+" repo is successfully removed")
 }
 
-func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Request) {
+func (ch *ChartHandler) UpdateChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Update ChartRepo")
 	setResponseHeader(w)
 
@@ -251,7 +255,7 @@ func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Req
 		chartRepo.Name = repo.Name
 		chartRepo.URL = repo.Url
 
-		if err := hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
+		if err := ch.hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
 			klog.Errorln(err, "failed to update chart repo")
 			respond(w, http.StatusBadRequest, &schemas.Error{
 				Error:       err.Error(),
@@ -262,6 +266,7 @@ func (hcm *HelmClientManager) UpdateChartRepo(w http.ResponseWriter, r *http.Req
 		klog.Infoln(chartRepo.Name + " repo is successfully updated")
 	}
 
+	ch.UpdateChartHandler()
 	respond(w, http.StatusOK, "repo update is successfully done")
 }
 

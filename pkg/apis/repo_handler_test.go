@@ -22,19 +22,6 @@ import (
 
 func TestAddRepos(t *testing.T) {
 
-	ctrl := gomock.NewController(t)
-	m := mockhelmclient.NewMockClient(ctrl)
-	m.EXPECT().AddOrUpdateChartRepo(repo.Entry{
-		Name:                  "test",
-		URL:                   "test-url",
-		InsecureSkipTLSverify: true, // for-test
-	}).Return(nil)
-	hcm := HelmClientManager{
-		Hci: m,
-	}
-
-	defer ctrl.Finish()
-
 	chartConfig := schemas.IndexFile{}
 	byteChartConfig, _ := json.Marshal(chartConfig)
 
@@ -45,6 +32,21 @@ func TestAddRepos(t *testing.T) {
 	_ = os.WriteFile(repositoryCache+"/test"+indexFileSuffix, byteChartConfig, 0644)
 	defer os.Remove(repositoryConfig)
 	defer os.Remove(repositoryCache + "/test" + indexFileSuffix)
+
+	ctrl := gomock.NewController(t)
+	m := mockhelmclient.NewMockClient(ctrl)
+	m.EXPECT().AddOrUpdateChartRepo(repo.Entry{
+		Name:                  "test",
+		URL:                   "test-url",
+		InsecureSkipTLSverify: true, // for-test
+	}).Return(nil)
+	hcm := &HelmClientManager{
+		Hci: m,
+	}
+
+	ch := NewChartHandler(hcm)
+
+	defer ctrl.Finish()
 
 	t.Run("check add repos", func(t *testing.T) {
 		repoReq := schemas.RepoRequest{
@@ -57,7 +59,7 @@ func TestAddRepos(t *testing.T) {
 		assert.Nil(t, err, "")
 
 		response := httptest.NewRecorder()
-		hcm.AddChartRepo(response, req)
+		ch.AddChartRepo(response, req)
 		if status := response.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",
 				status, http.StatusOK)
@@ -67,14 +69,6 @@ func TestAddRepos(t *testing.T) {
 }
 
 func TestDeleteRepos(t *testing.T) {
-
-	ctrl := gomock.NewController(t)
-	m := mockhelmclient.NewMockClient(ctrl)
-	hcm := &HelmClientManager{
-		Hci: m,
-	}
-
-	defer ctrl.Finish()
 
 	chartConfig := schemas.IndexFile{
 		APIVersion: "test",
@@ -100,13 +94,21 @@ func TestDeleteRepos(t *testing.T) {
 	defer os.Remove(repositoryCache + "/test" + chartsFileSuffix)
 	defer os.Remove(repositoryCache)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := mockhelmclient.NewMockClient(ctrl)
+	hcm := &HelmClientManager{
+		Hci: m,
+	}
+	ch := NewChartHandler(hcm)
+
 	t.Run("check delete repos", func(t *testing.T) {
 
 		req := httptest.NewRequest("DELETE", "/helm/repos/test", nil)
 		req = mux.SetURLVars(req, map[string]string{"repo-name": "test"})
 
 		response := httptest.NewRecorder()
-		hcm.DeleteChartRepo(response, req)
+		ch.DeleteChartRepo(response, req)
 		if status := response.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",
 				status, http.StatusOK)
