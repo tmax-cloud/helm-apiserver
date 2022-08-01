@@ -12,7 +12,7 @@ import (
 	"k8s.io/klog"
 )
 
-// [TODO] : http request들은 고루틴으로 실행
+// [TODO] : channel 사용으로 sync call 되도록 변경
 func (hcm *HelmClientManager) CreateChartRepo(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Create Helm Chart Repository")
 

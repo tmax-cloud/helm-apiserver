@@ -12,14 +12,12 @@ import (
 	"helm.sh/helm/v3/pkg/time"
 	"k8s.io/klog"
 
+	"go.mongodb.org/mongo-driver/mongo"
+
+	"github.com/tmax-cloud/helm-apiserver/pkg/db"
+
 	// "github.com/tmax-cloud/helm-apiserver/internal"
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
-)
-
-const (
-	ca_crt      = "/tmp/cert/ca.crt"
-	public_key  = "/tmp/cert/tls.crt"
-	private_key = "/tmp/cert/tls.key"
 )
 
 // [Plan A]
@@ -30,18 +28,23 @@ const (
 // add chart repo 후, -index.yaml 파일은 있는데 같은이름이 .helmrepo 파일에 없을경우
 // .helmrepo 파일에 request로 들어온 name / url을 덮어씌워주고 마무리.
 
+// [TODO]
+// GET Repo 에서 {repo-name} 으로 상세 정보 return 필요
+// Get repo에서 시간 추가해줄것
+// Add Repo에서 name / url check logic 추가
+// update API 는 특정 repo만 update 되도록 변경
+
 func (hcm *HelmClientManager) AddDefaultRepo() {
 	klog.Infoln("Add default Chart repo")
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList, _ := readRepoList()
+	// repoList, _ := readRepoList()
 
-	// store repo names into repoNames slice
-	for _, repoInfo := range repoList.Repositories {
-		if repoInfo.Name == "tmax-stable" {
-			return
-		}
-	}
+	// for _, repoInfo := range repoList.Repositories {
+	// 	if repoInfo.Name == "tmax-stable" {
+	// 		return
+	// 	}
+	// }
 
 	chartRepo := repo.Entry{
 		Name: "tmax-stable",
@@ -52,6 +55,11 @@ func (hcm *HelmClientManager) AddDefaultRepo() {
 		klog.Errorln(err, "failed to add default tmax chart repo")
 		return
 	}
+
+	// if err := InsertChartsToDB(ch.col, chartRepo.Name, chartRepo.URL); err != nil {
+	// 	klog.Errorln(err, "inserting charts to DB is failed")
+	// }
+
 }
 
 func (ch *ChartHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
@@ -68,40 +76,56 @@ func (ch *ChartHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList, err := readRepoList()
-	if err != nil {
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while reading repository list file",
-		})
-		return
-	}
+	repoList, _ := readRepoList()
+	if repoList != nil {
+		var repoNames []string
+		// store repo names into repoNames slice
+		for _, repoInfo := range repoList.Repositories {
+			repoNames = append(repoNames, repoInfo.Name)
+		}
 
-	var repoNames []string
-	// store repo names into repoNames slice
-	for _, repoInfo := range repoList.Repositories {
-		repoNames = append(repoNames, repoInfo.Name)
-	}
-
-	// Check if req repoName is already exist
-	for _, repoName := range repoNames {
-		if req.Name == repoName {
-			klog.Errorln(req.Name + " name repository is already exist")
-			respond(w, http.StatusBadRequest, &schemas.Error{
-				Description: req.Name + " name repository is already exist",
-			})
-			return
+		// Check if req repoName is already exist
+		for _, repoName := range repoNames {
+			if req.Name == repoName {
+				klog.Errorln(req.Name + " name repository is already exist")
+				respond(w, http.StatusBadRequest, &schemas.Error{
+					Description: req.Name + " name repository is already exist",
+				})
+				return
+			}
 		}
 	}
 
-	chartRepo := repo.Entry{
-		Name: req.Name,
-		URL:  req.RepoURL,
-		// CAFile:                ca_crt,
-		// CertFile:              public_key,
-		// KeyFile:               private_key,
-		InsecureSkipTLSverify: true,
+	// for new version
+	chartRepo := repo.Entry{}
+	if req.Is_private { // Default false
+		// 시크릿 가져와서 user ID / access TOKEN 추가
+		chartRepo = repo.Entry{
+			Name:     req.Name,
+			URL:      req.RepoURL,
+			Username: req.Id,
+			Password: req.Password,
+			// CAFile:                ca_crt,
+			// CertFile:              public_key,
+			// KeyFile:               private_key,
+			InsecureSkipTLSverify: true,
+		}
+	} else {
+		chartRepo = repo.Entry{
+			Name:                  req.Name,
+			URL:                   req.RepoURL,
+			InsecureSkipTLSverify: true,
+		}
 	}
+
+	// chartRepo := repo.Entry{
+	// 	Name: req.Name,
+	// 	URL:  req.RepoURL,
+	// 	// CAFile:                ca_crt,
+	// 	// CertFile:              public_key,
+	// 	// KeyFile:               private_key,
+	// 	InsecureSkipTLSverify: true,
+	// }
 
 	// hcm.SetClientTLS(req.RepoURL)
 
@@ -113,6 +137,10 @@ func (ch *ChartHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// if err := InsertChartsToDB(ch.col, req.Name, req.RepoURL); err != nil {
+	// 	klog.Errorln(err, "inserting charts to DB is failed")
+	// }
 
 	// Read repositoryConfig File which contains repo Info list
 	afterRepoList, err := readRepoList()
@@ -149,7 +177,7 @@ func (ch *ChartHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	ch.UpdateChartHandler()
+	ch.UpdateChartHandler() // 확인 필요
 
 	klog.Infoln(req.Name + " repo is successfully added")
 	respond(w, http.StatusOK, req.Name+" repo is successfully added")
@@ -160,18 +188,42 @@ func (ch *ChartHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 	setResponseHeader(w)
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList, err := readRepoList()
-	if err != nil {
-		respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while reading repository list file",
+	repoList, _ := readRepoList()
+	if repoList == nil {
+		respond(w, http.StatusOK, &schemas.Error{
+			Error:       "No helm repository is added",
+			Description: "you need to add at least one helm repository",
 		})
 		return
 	}
 
 	// Set Response with repo Info list
+	totalRepo := &schemas.RepoResponse{}
 	response := &schemas.RepoResponse{}
-	response.RepoInfo = repoList.Repositories
+
+	// set last updated time
+	for _, repo := range repoList.Repositories {
+		r_index, err := readRepoIndex(repo.Name)
+		if err != nil {
+			klog.Errorln(err, "failed to read index file")
+		}
+		repo.LastUpdated = r_index.Generated
+		totalRepo.RepoInfo = append(totalRepo.RepoInfo, repo)
+	}
+
+	vars := mux.Vars(r)
+	reqRepoName, exist := vars["repo-name"]
+	if exist {
+		for _, repo := range totalRepo.RepoInfo {
+			if repo.Name == reqRepoName {
+				response.RepoInfo = append(response.RepoInfo, repo)
+			}
+		}
+		klog.Infoln("Get Chart repo is successfully done")
+		respond(w, http.StatusOK, response)
+		return
+	}
+	response.RepoInfo = totalRepo.RepoInfo
 
 	klog.Infoln("Get Chart repo is successfully done")
 	respond(w, http.StatusOK, response)
@@ -250,21 +302,28 @@ func (ch *ChartHandler) UpdateChartRepo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	vars := mux.Vars(r)
+	reqRepoName := vars["repo-name"]
+
 	chartRepo := repo.Entry{}
 	for _, repo := range repoList.Repositories {
-		chartRepo.Name = repo.Name
-		chartRepo.URL = repo.Url
-
-		if err := ch.hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
-			klog.Errorln(err, "failed to update chart repo")
-			respond(w, http.StatusBadRequest, &schemas.Error{
-				Error:       err.Error(),
-				Description: "Error occurs while updating helm repo " + chartRepo.Name,
-			})
-			return
+		if repo.Name == reqRepoName {
+			chartRepo.Name = repo.Name
+			chartRepo.URL = repo.Url
+			chartRepo.Username = repo.UserName
+			chartRepo.Password = repo.Password
 		}
-		klog.Infoln(chartRepo.Name + " repo is successfully updated")
 	}
+
+	if err := ch.hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
+		klog.Errorln(err, "failed to update chart repo")
+		respond(w, http.StatusBadRequest, &schemas.Error{
+			Error:       err.Error(),
+			Description: "Error occurs while updating helm repo " + chartRepo.Name,
+		})
+		return
+	}
+	klog.Infoln(chartRepo.Name + " repo is successfully updated")
 
 	ch.UpdateChartHandler()
 	respond(w, http.StatusOK, "repo update is successfully done")
@@ -284,6 +343,31 @@ func writeRepoList(repoList *schemas.RepositoryFile) error {
 	if err := ioutil.WriteFile(repositoryConfig, newRepoListFileYaml, 0644); err != nil {
 		klog.Errorln(err, "failed to write new repo list file")
 		return err
+	}
+
+	return nil
+}
+
+func InsertChartsToDB(col *mongo.Collection, repoName string, repoUrl string) error {
+
+	index, err := readRepoIndex(repoName)
+	if err != nil {
+		klog.Errorln(err, "failed to read index file")
+		return err
+	}
+
+	// Insert To DB
+	for _, charts := range index.Entries {
+		for _, chart := range charts {
+			chart.Repo.Name = repoName
+			chart.Repo.Url = repoUrl
+			_, err := db.InsertDoc(col, chart) // #######테스트########
+			klog.Info("insert done!")
+			if err != nil {
+				klog.Errorln(err)
+				return err
+			}
+		}
 	}
 
 	return nil

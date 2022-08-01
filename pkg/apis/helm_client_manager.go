@@ -12,7 +12,11 @@ import (
 
 const (
 	repositoryCache  = "/tmp/.helmcache" // 캐시 디렉토리. 특정 chart-repo에 해당하는 chart 이름 리스트 txt파일과, 해당 repo의 index.yaml 파일이 저장됨
-	repositoryConfig = "/tmp/.helmrepo"  // 현재 add된 repo들 저장. go helm client 버그. 무조건 /tmp/.helmrepo 에다가 저장됨.
+	repositoryConfig = "/tmp/.helmrepo"  // 현재 add된 repo들 저장.
+
+	ca_crt      = "/tmp/cert/ca.crt"
+	public_key  = "/tmp/cert/tls.crt"
+	private_key = "/tmp/cert/tls.key"
 )
 
 type HelmClientManager struct {
@@ -45,7 +49,7 @@ func (hcm *HelmClientManager) SetClientNS(ns string) error {
 	}
 
 	// [TODO] 나머지 테스트 완료 후 활성화
-	// cfg.BearerToken = "BearerToekn"
+	// cfg.BearerToken = token
 	// cfg.BearerTokenFile = ""
 
 	settings := hcm.Hcs.Settings
