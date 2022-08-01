@@ -1,7 +1,7 @@
 package schemas
 
 import (
-	"time"
+	"helm.sh/helm/v3/pkg/time"
 
 	"helm.sh/helm/v3/pkg/chart"
 )
@@ -14,8 +14,9 @@ type ChartResponse struct {
 
 type IndexFile struct {
 	// This is used ONLY for validation against chartmuseum's index files and is discarded after validation.
-	ServerInfo map[string]interface{}   `json:"serverInfo,omitempty"`
-	APIVersion string                   `json:"apiVersion"`
+	ServerInfo map[string]interface{} `json:"serverInfo,omitempty"`
+	APIVersion string                 `json:"apiVersion"`
+	// Index file update 된 시간, repo response와 sync를 위해 time package 변경
 	Generated  time.Time                `json:"generated"`
 	Entries    map[string]ChartVersions `json:"entries"`
 	PublicKeys []string                 `json:"publicKeys,omitempty"`

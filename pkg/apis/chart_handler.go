@@ -30,6 +30,7 @@ type ChartHandler struct {
 	hcm                *HelmClientManager
 	Index              *schemas.IndexFile
 	SingleChartEntries map[string]schemas.ChartVersions
+	// col                *mongo.Collection
 }
 
 func NewChartHandler(hcmanager *HelmClientManager) *ChartHandler {
@@ -42,6 +43,7 @@ func NewChartHandler(hcmanager *HelmClientManager) *ChartHandler {
 		Index:              index,
 		SingleChartEntries: singleChartEntries,
 	}
+
 }
 
 func (ch *ChartHandler) UpdateChartHandler() {
@@ -55,16 +57,18 @@ func getIndex() *schemas.IndexFile {
 	repoList, err := readRepoList()
 	if err != nil {
 		klog.Errorln(err, "failed to save index file")
+		return nil
 	}
 
 	repoInfos := make(map[string]string)
-	// store repo names into repoNames slice
+	// store repo names
 	for _, repoInfo := range repoList.Repositories {
 		repoInfos[repoInfo.Name] = repoInfo.Url
 	}
 
 	index := &schemas.IndexFile{}
 	allEntries := make(map[string]schemas.ChartVersions)
+	// col := db.GetMongoDBConnetion() // #######테스트########
 
 	// read all index.yaml file and save only Entries
 	for repoName, repoUrl := range repoInfos {
@@ -77,17 +81,30 @@ func getIndex() *schemas.IndexFile {
 			for _, chart := range charts {
 				chart.Repo.Name = repoName
 				chart.Repo.Url = repoUrl
+				// _, err := db.InsertDoc(col, chart) // #######테스트########
+				// klog.Info("insert done!")
+				// if err != nil {
+				// 	klog.Error(err)
+				// }
 			}
-			allEntries[repoName+"_"+key] = charts // 요부분 봐야댐
+			allEntries[repoName+"_"+key] = charts // 중복 chart name 가능하도록 repo name과 결합
 		}
 	}
+
+	// filter := bson.D{{}}
+	// var test []schemas.ChartVersion
+	// test, _ = db.FindDoc(col, filter, filter)
+	// for _, ch := range test {
+	// 	klog.Info(ch.Name)
+	// }
+
 	index.Entries = allEntries
 	klog.Info("saving index file is done")
 	return index
 }
 
 func getSingleChart(index *schemas.IndexFile) map[string]schemas.ChartVersions {
-	if len(index.Entries) == 0 {
+	if index == nil {
 		return nil
 	}
 
@@ -103,7 +120,16 @@ func getSingleChart(index *schemas.IndexFile) map[string]schemas.ChartVersions {
 func (ch *ChartHandler) GetCharts(w http.ResponseWriter, r *http.Request) {
 	klog.Infoln("Get Charts")
 	setResponseHeader(w)
-	startTime := time.Now()
+
+	if ch.Index == nil {
+		respond(w, http.StatusOK, &schemas.Error{
+			Error:       "No helm repository is added",
+			Description: "you need to add at least one helm repository",
+		})
+		return
+	}
+
+	startTime := time.Now() // for checking response time
 
 	response := &schemas.ChartResponse{}
 	index := &schemas.IndexFile{}
@@ -290,6 +316,7 @@ func (hcm *HelmClientManager) getChart(chartName string, chartPathOptions *actio
 	}
 
 	return helmChart, chartPath, err
+
 }
 
 func readRepoIndex(repoName string) (index *schemas.IndexFile, err error) {
@@ -315,7 +342,7 @@ func readRepoList() (repoList *schemas.RepositoryFile, err error) {
 	repoList = &schemas.RepositoryFile{}
 	repoListFile, err := ioutil.ReadFile(repositoryConfig)
 	if err != nil {
-		klog.Errorln(err, "failed to get repository list file")
+		klog.Errorln(err, "failed to get repository list")
 		return nil, err
 	}
 
