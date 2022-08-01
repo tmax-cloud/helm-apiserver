@@ -102,8 +102,6 @@ func (hcm *HelmClientManager) Websocket(w http.ResponseWriter, r *http.Request) 
 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
-	klog.Info(namespace)
-	// hcm.SetClientNS(namespace)
 
 	client := &Client{hub: hub, conn: conn, send: make(chan schemas.ReleaseResponse, 256), hcm: hcm, ns: namespace}
 	client.hub.register <- client
