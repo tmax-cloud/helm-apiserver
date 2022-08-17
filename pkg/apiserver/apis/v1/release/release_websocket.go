@@ -1,4 +1,4 @@
-package apis
+package release
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	gsocket "github.com/gorilla/websocket"
-	"github.com/tmax-cloud/helm-apiserver/internal"
+	"github.com/tmax-cloud/helm-apiserver/internal/utils"
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 	"k8s.io/klog"
 )
@@ -23,7 +23,7 @@ type Client struct {
 
 	send chan schemas.ReleaseResponse
 
-	hcm *HelmClientManager
+	sh *ReleaseHandler
 
 	ns string
 }
@@ -92,9 +92,9 @@ func filter(releaseList schemas.ReleaseResponse, ns string) schemas.ReleaseRespo
 var hub *Hub
 
 // serveWs handles websocket requests from the peer.
-func (hcm *HelmClientManager) Websocket(w http.ResponseWriter, r *http.Request) {
+func (sh *ReleaseHandler) Websocket(w http.ResponseWriter, r *http.Request) {
 	klog.Info("Start websocket connection")
-	conn, err := internal.UpgradeWebsocket(w, r)
+	conn, err := utils.UpgradeWebsocket(w, r)
 	if err != nil {
 		klog.Errorln(err)
 		return
@@ -103,7 +103,7 @@ func (hcm *HelmClientManager) Websocket(w http.ResponseWriter, r *http.Request) 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
 
-	client := &Client{hub: hub, conn: conn, send: make(chan schemas.ReleaseResponse, 256), hcm: hcm, ns: namespace}
+	client := &Client{hub: hub, conn: conn, send: make(chan schemas.ReleaseResponse, 256), sh: sh, ns: namespace}
 	client.hub.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in
@@ -112,7 +112,6 @@ func (hcm *HelmClientManager) Websocket(w http.ResponseWriter, r *http.Request) 
 	go client.readPump()
 }
 
-// 모든 release list를 준다
 func (c *Client) readPump() {
 	defer func() {
 		c.hub.unregister <- c
@@ -127,7 +126,7 @@ func (c *Client) readPump() {
 			break
 		}
 
-		releaseList := c.hcm.GetReleasesForWS(c.ns) // ReleaseList 받아오기
+		releaseList := c.sh.GetReleasesForWS(c.ns) // ReleaseList 받아오기
 
 		respMsg, err := json.Marshal(releaseList)
 
@@ -142,7 +141,6 @@ func (c *Client) readPump() {
 	}
 }
 
-// 변화된 release를 준다
 func (c *Client) writePump() {
 	defer func() {
 		c.conn.Close()

@@ -1,4 +1,4 @@
-package apis
+package release
 
 import (
 	"bytes"
@@ -13,13 +13,14 @@ import (
 	helmclient "github.com/mittwald/go-helm-client"
 	mockhelmclient "github.com/mittwald/go-helm-client/mock"
 	"github.com/stretchr/testify/assert"
+	"github.com/tmax-cloud/helm-apiserver/internal/hclient"
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 	"helm.sh/helm/v3/pkg/release"
 )
 
 func TestGetReleases(t *testing.T) {
 
-	hcm := NewHelmClientManager()
+	hcm := hclient.NewHelmClientManager()
 
 	var releases []*release.Release
 	ctrl := gomock.NewController(t)
@@ -27,6 +28,9 @@ func TestGetReleases(t *testing.T) {
 	m.EXPECT().ListDeployedReleases().Return(releases, nil)
 
 	hcm.Hci = m
+	sh := ReleaseHandler{
+		hcm: hcm,
+	}
 
 	defer ctrl.Finish()
 
@@ -35,7 +39,7 @@ func TestGetReleases(t *testing.T) {
 		req, err := http.NewRequest("GET", "/helm/ns/test/releases", nil)
 		assert.Nil(t, err, "")
 		response := httptest.NewRecorder()
-		hcm.GetReleases(response, req)
+		sh.GetReleases(response, req)
 
 		if status := response.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",
@@ -46,7 +50,7 @@ func TestGetReleases(t *testing.T) {
 
 func TestInstallReleases(t *testing.T) {
 
-	hcm := NewHelmClientManager()
+	hcm := hclient.NewHelmClientManager()
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: "test-release",
@@ -62,6 +66,9 @@ func TestInstallReleases(t *testing.T) {
 	m.EXPECT().InstallOrUpgradeChart(context.Background(), &chartSpec).Return(release, nil)
 
 	hcm.Hci = m
+	sh := ReleaseHandler{
+		hcm: hcm,
+	}
 
 	defer ctrl.Finish()
 
@@ -80,7 +87,7 @@ func TestInstallReleases(t *testing.T) {
 		req, err := http.NewRequest("GET", "/helm/ns/test/releases", reqBody)
 		assert.Nil(t, err, "")
 		response := httptest.NewRecorder()
-		hcm.InstallRelease(response, req)
+		sh.InstallRelease(response, req)
 
 		if status := response.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",
@@ -91,13 +98,16 @@ func TestInstallReleases(t *testing.T) {
 
 func TestUnInstallReleases(t *testing.T) {
 
-	hcm := NewHelmClientManager()
+	hcm := hclient.NewHelmClientManager()
 
 	ctrl := gomock.NewController(t)
 	m := mockhelmclient.NewMockClient(ctrl)
 	m.EXPECT().UninstallReleaseByName("test-release").Return(nil)
 
 	hcm.Hci = m
+	sh := ReleaseHandler{
+		hcm: hcm,
+	}
 
 	defer ctrl.Finish()
 
@@ -108,7 +118,7 @@ func TestUnInstallReleases(t *testing.T) {
 		req = mux.SetURLVars(req, map[string]string{"release-name": "test-release"})
 
 		response := httptest.NewRecorder()
-		hcm.UnInstallRelease(response, req)
+		sh.UnInstallRelease(response, req)
 
 		if status := response.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",

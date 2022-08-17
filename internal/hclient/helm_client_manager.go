@@ -1,4 +1,4 @@
-package apis
+package hclient
 
 import (
 	"os"
