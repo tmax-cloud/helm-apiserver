@@ -5,26 +5,23 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/gorilla/mux"
-	"k8s.io/klog"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
+	"k8s.io/klog"
 
 	"github.com/tmax-cloud/helm-apiserver/internal/utils"
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 )
 
-func (c *ChartHandler) chartHandler(w http.ResponseWriter, req *http.Request) {
-	c.GetCharts(w, req)
-	klog.Info(req.Header)
+func (ch *ChartHandler) chartHandler(w http.ResponseWriter, req *http.Request) {
+	ch.GetCharts(w, req)
 }
 
 func (ch *ChartHandler) GetCharts(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("Get Charts")
 	utils.SetResponseHeader(w)
 
 	if ch.Index == nil {
@@ -34,8 +31,6 @@ func (ch *ChartHandler) GetCharts(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
-	startTime := time.Now() // for checking response time
 
 	response := &schemas.ChartResponse{}
 	index := &schemas.IndexFile{}
@@ -140,10 +135,7 @@ func (ch *ChartHandler) GetCharts(w http.ResponseWriter, r *http.Request) {
 			response.Versions = versions
 		}
 
-		checkTime2 := time.Since(startTime)
-		klog.Info("check1 Duration: ", checkTime2)
-
-		klog.Infoln("Get Charts of " + reqChartName + " is successfully done")
+		klog.V(3).Info("Get Charts of " + reqChartName + " is successfully done")
 		utils.Respond(w, http.StatusOK, response)
 		return
 	}
@@ -161,15 +153,12 @@ func (ch *ChartHandler) GetCharts(w http.ResponseWriter, r *http.Request) {
 		response.IndexFile = *index
 	}
 
-	klog.Infoln("Get Charts is successfully done")
+	klog.V(3).Info("Get Charts is successfully done")
 	utils.Respond(w, http.StatusOK, response)
-
-	elapsedTime := time.Since(startTime)
-	klog.Info("Total Duration: ", elapsedTime)
 
 }
 
-func getChartInfo(ch *ChartHandler, chart *schemas.ChartVersion) (schemas.ChartVersions, map[string]interface{}, error) {
+func getChartInfo(ch *ChartHandler, chart *schemas.ChartVersion) (schemas.ChartVersions, string, error) {
 	var chartVersions []*schemas.ChartVersion
 	var reqURL string
 	var chartPath string
@@ -196,20 +185,19 @@ func getChartInfo(ch *ChartHandler, chart *schemas.ChartVersion) (schemas.ChartV
 	})
 	defer os.Remove(filePath)
 
-	// klog.Info("File NAME")
-	// for _, file := range helmChart.Raw {
-	// 	if file.Name == "values.yaml" {
-	// 		klog.Info(string(file.Data))
-	// 	}
-	// }
-	// klog.Info(string(helmChart.Schema))
-
+	var values []byte
 	if helmChart == nil {
-		klog.Errorln(err, "failed to get chart: "+chart.Name+" info")
-		return nil, nil, err
+		klog.V(1).Info(err, "failed to get chart: "+chart.Name+" info")
+		return nil, "", err
+	} else {
+		for _, file := range helmChart.Raw {
+			if file.Name == "values.yaml" {
+				values = file.Data
+			}
+		}
 	}
 
-	return chartVersions, helmChart.Values, nil
+	return chartVersions, string(values), nil
 
 }
 

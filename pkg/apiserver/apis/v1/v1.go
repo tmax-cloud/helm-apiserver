@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-logr/logr"
 	"github.com/tmax-cloud/helm-apiserver/internal/apiserver"
 	"github.com/tmax-cloud/helm-apiserver/internal/hclient"
 	"github.com/tmax-cloud/helm-apiserver/internal/utils"
@@ -32,11 +31,31 @@ type handler struct {
 }
 
 // NewHandler instantiates a new v1 api handler
-func NewHandler(parent wrapper.RouterWrapper, cli client.Client, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, logger logr.Logger, chartCache *chart.ChartCache) (apiserver.APIHandler, error) {
+func NewHandlerForAggr(parent wrapper.RouterWrapper, cli client.Client, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, chartCache *chart.ChartCache) (apiserver.APIHandler, error) {
 	handler := &handler{}
 
 	// /v1
-	versionWrapper := wrapper.New(fmt.Sprintf("/%s/%s", apiserver.APIGroup, APIVersion), nil, handler.versionHandler)
+	versionWrapper := wrapper.New(fmt.Sprintf("/%s/%s", apiserver.APIGroup, APIVersion), []string{http.MethodGet}, handler.versionHandler)
+	if err := parent.Add(versionWrapper); err != nil {
+		return nil, err
+	}
+
+	// /v1/repos/<repo>
+	repoHandler, err := repos.NewHandler(versionWrapper, hcm, authCli, chartCache)
+	if err != nil {
+		return nil, err
+	}
+	handler.repoHandler = repoHandler
+
+	return handler, nil
+}
+
+// NewHandler instantiates a new v1 api handler
+func NewHandlerForNormal(parent wrapper.RouterWrapper, cli client.Client, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, chartCache *chart.ChartCache) (apiserver.APIHandler, error) {
+	handler := &handler{}
+
+	// /v1
+	versionWrapper := wrapper.New(fmt.Sprintf("/%s", APIVersion), nil, nil)
 	if err := parent.Add(versionWrapper); err != nil {
 		return nil, err
 	}
@@ -55,13 +74,6 @@ func NewHandler(parent wrapper.RouterWrapper, cli client.Client, hcm *hclient.He
 	}
 	handler.releaseHandler = releaseHandler
 
-	// /v1/repos/<repo>
-	repoHandler, err := repos.NewHandler(versionWrapper, hcm, authCli, chartCache)
-	if err != nil {
-		return nil, err
-	}
-	handler.repoHandler = repoHandler
-
 	return handler, nil
 }
 
@@ -72,14 +84,14 @@ func (h *handler) versionHandler(w http.ResponseWriter, _ *http.Request) {
 	apiResourceList.APIVersion = APIVersion
 
 	apiResourceList.APIResources = []metav1.APIResource{
-		{
-			Name:       ChartResource,
-			Namespaced: false,
-		},
-		{
-			Name:       ReleaseResource,
-			Namespaced: true, // release is namespaced scope
-		},
+		// {
+		// 	Name:       ChartResource,
+		// 	Namespaced: false,
+		// },
+		// {
+		// 	Name:       ReleaseResource,
+		// 	Namespaced: true, // release is namespaced scope
+		// },
 		{
 			Name:       RepoResource,
 			Namespaced: false,

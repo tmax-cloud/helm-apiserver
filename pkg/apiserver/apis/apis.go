@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-logr/logr"
 	"github.com/tmax-cloud/helm-apiserver/internal/apiserver"
 	"github.com/tmax-cloud/helm-apiserver/internal/hclient"
 	"github.com/tmax-cloud/helm-apiserver/internal/utils"
@@ -19,11 +18,12 @@ import (
 )
 
 type handler struct {
-	v1Handler apiserver.APIHandler
+	v1Handler   apiserver.APIHandler
+	helmHandler apiserver.APIHandler
 }
 
 // NewHandler instantiates a new apis handler
-func NewHandler(parent wrapper.RouterWrapper, cli client.Client, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, logger logr.Logger, chartCache *chart.ChartCache) (apiserver.APIHandler, error) {
+func NewHandler(parent wrapper.RouterWrapper, cli client.Client, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, chartCache *chart.ChartCache) (apiserver.APIHandler, error) {
 	handler := &handler{}
 
 	//apis
@@ -33,11 +33,24 @@ func NewHandler(parent wrapper.RouterWrapper, cli client.Client, hcm *hclient.He
 	}
 
 	// /apis/v1
-	v1Handler, err := v1.NewHandler(apiWrapper, cli, hcm, authCli, logger, chartCache)
+	v1Handler, err := v1.NewHandlerForAggr(apiWrapper, cli, hcm, authCli, chartCache)
 	if err != nil {
 		return nil, err
 	}
 	handler.v1Handler = v1Handler
+
+	//helm
+	helmWrapper := wrapper.New("/helm", nil, nil)
+	if err := parent.Add(helmWrapper); err != nil {
+		return nil, err
+	}
+
+	// /helm/v1
+	helmHandler, err := v1.NewHandlerForNormal(helmWrapper, cli, hcm, authCli, chartCache)
+	if err != nil {
+		return nil, err
+	}
+	handler.helmHandler = helmHandler
 
 	return handler, nil
 }

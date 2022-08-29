@@ -17,15 +17,11 @@ import (
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/tmax-cloud/helm-apiserver/internal/wrapper"
 	"github.com/tmax-cloud/helm-apiserver/pkg/apiserver/apis"
 	"github.com/tmax-cloud/helm-apiserver/pkg/apiserver/apis/v1/chart"
-	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 )
-
-var log = logf.Log.WithName("api-server")
 
 // Server is an interface of server
 type Server interface {
@@ -58,17 +54,17 @@ func New(cli client.Client, cfg *rest.Config, hcm *hclient.HelmClientManager, ca
 	srv.cache = cache
 	srv.hcm = hcm
 	chartCache := &chart.ChartCache{
-		Index: getIndex(),
+		Index: utils.GetIndex(),
 	}
 	srv.ChartCache = chartCache
-	srv.ChartCache.SingleChartEntries = getSingleChart(srv.ChartCache.Index)
+	srv.ChartCache.SingleChartEntries = utils.GetSingleChart(srv.ChartCache.Index)
 	srv.authCli, err = authorization.NewForConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	// Set apisHandler
-	apisHandler, err := apis.NewHandler(srv.wrapper, srv.client, srv.hcm, srv.authCli, log, srv.ChartCache)
+	apisHandler, err := apis.NewHandler(srv.wrapper, srv.client, srv.hcm, srv.authCli, srv.ChartCache)
 	if err != nil {
 		return nil, err
 	}
@@ -85,18 +81,20 @@ func (s *server) Start() {
 	}
 
 	// Create cert
-	if err := createCert(context.Background(), s.client); err != nil {
+	if err := updateCaBundle(context.Background(), s.client); err != nil {
 		panic(err)
 	}
 
-	addr := "0.0.0.0:8443"
-	log.Info(fmt.Sprintf("API aggregation server is running on %s", addr))
+	// if err := createCert(context.Background(), s.client); err != nil {
+	// 	panic(err)
+	// }
 
 	cfg, err := tlsConfig(context.Background(), s.client)
 	if err != nil {
 		panic(err)
 	}
-	klog.Info("serving https")
+
+	klog.V(3).Info("starting API server")
 	httpServer := &http.Server{Addr: ":8443", Handler: s.wrapper.Router(), TLSConfig: cfg}
 	if err := httpServer.ListenAndServeTLS(path.Join(certDir, "tls.crt"), path.Join(certDir, "tls.key")); err != nil && err != http.ErrServerClosed {
 		panic(err)
@@ -122,67 +120,54 @@ func addPath(paths *[]string, w wrapper.RouterWrapper) {
 	}
 }
 
-func getIndex() *schemas.IndexFile {
-	// Read repositoryConfig File which contains repo Info list
-	repoList, err := utils.ReadRepoList()
-	if err != nil {
-		klog.Errorln(err, "failed to save index file")
-		return nil
-	}
+// func getIndex() *schemas.IndexFile {
+// 	// Read repositoryConfig File which contains repo Info list
+// 	repoList, err := utils.ReadRepoList()
+// 	if err != nil {
+// 		klog.Errorln(err, "failed to save index file")
+// 		return nil
+// 	}
 
-	repoInfos := make(map[string]string)
-	// store repo names
-	for _, repoInfo := range repoList.Repositories {
-		repoInfos[repoInfo.Name] = repoInfo.Url
-	}
+// 	repoInfos := make(map[string]string)
+// 	// store repo names
+// 	for _, repoInfo := range repoList.Repositories {
+// 		repoInfos[repoInfo.Name] = repoInfo.Url
+// 	}
 
-	index := &schemas.IndexFile{}
-	allEntries := make(map[string]schemas.ChartVersions)
-	// col := db.GetMongoDBConnetion() // #######테스트########
+// 	index := &schemas.IndexFile{}
+// 	allEntries := make(map[string]schemas.ChartVersions)
 
-	// read all index.yaml file and save only Entries
-	for repoName, repoUrl := range repoInfos {
-		if index, err = utils.ReadRepoIndex(repoName); err != nil {
-			klog.Errorln(err, "failed to read index file")
-		}
+// 	// read all index.yaml file and save only Entries
+// 	for repoName, repoUrl := range repoInfos {
+// 		if index, err = utils.ReadRepoIndex(repoName); err != nil {
+// 			klog.Errorln(err, "failed to read index file")
+// 		}
 
-		// add repo info
-		for key, charts := range index.Entries {
-			for _, chart := range charts {
-				chart.Repo.Name = repoName
-				chart.Repo.Url = repoUrl
-				// _, err := db.InsertDoc(col, chart) // #######테스트########
-				// klog.Info("insert done!")
-				// if err != nil {
-				// 	klog.Error(err)
-				// }
-			}
-			allEntries[repoName+"_"+key] = charts // 중복 chart name 가능하도록 repo name과 결합
-		}
-	}
+// 		// add repo info
+// 		for key, charts := range index.Entries {
+// 			for _, chart := range charts {
+// 				chart.Repo.Name = repoName
+// 				chart.Repo.Url = repoUrl
+// 			}
+// 			allEntries[repoName+"_"+key] = charts // 중복 chart name 가능하도록 repo name과 결합
+// 		}
+// 	}
 
-	// filter := bson.D{{}}
-	// var test []schemas.ChartVersion
-	// test, _ = db.FindDoc(col, filter, filter)
-	// for _, ch := range test {
-	// 	klog.Info(ch.Name)
-	// }
+// 	index.Entries = allEntries
+// 	klog.Info("saving index file is done")
+// 	return index
+// }
 
-	index.Entries = allEntries
-	klog.Info("saving index file is done")
-	return index
-}
+// func getSingleChart(index *schemas.IndexFile) map[string]schemas.ChartVersions {
+// 	if index == nil {
+// 		return nil
+// 	}
 
-func getSingleChart(index *schemas.IndexFile) map[string]schemas.ChartVersions {
-	if index == nil {
-		return nil
-	}
-
-	singleChartEntries := make(map[string]schemas.ChartVersions)
-	for key, charts := range index.Entries {
-		var oneChart []*schemas.ChartVersion
-		oneChart = append(oneChart, charts[0])
-		singleChartEntries[key] = oneChart
-	}
-	return singleChartEntries
-}
+// 	singleChartEntries := make(map[string]schemas.ChartVersions)
+// 	for key, charts := range index.Entries {
+// 		var oneChart []*schemas.ChartVersion
+// 		oneChart = append(oneChart, charts[0])
+// 		singleChartEntries[key] = oneChart
+// 	}
+// 	return singleChartEntries
+// }

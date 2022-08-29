@@ -36,62 +36,64 @@ func (rh *RepoHandler) repoHandler(w http.ResponseWriter, req *http.Request) {
 		}
 		if req.Method == http.MethodPut {
 			rh.UpdateChartRepo(w, req)
+			rh.UpdateChartCache()
 		}
 		if req.Method == http.MethodDelete {
 			rh.DeleteChartRepo(w, req)
+			rh.UpdateChartCache()
 		}
 	case !rel:
 		if req.Method == http.MethodPost {
 			rh.AddChartRepo(w, req)
+			rh.UpdateChartCache()
 		}
 		if req.Method == http.MethodGet {
 			rh.GetChartRepos(w, req)
 		}
 	}
-	rh.UpdateChartCache()
+
 }
 
 func (rh *RepoHandler) UpdateChartCache() {
-	rh.Index = getIndex()
-	rh.SingleChartEntries = getSingleChart(rh.Index)
-	klog.Info("Updating ChartCache is done")
+	rh.Index = utils.GetIndex()
+	rh.SingleChartEntries = utils.GetSingleChart(rh.Index)
+	klog.V(3).Info("Updating ChartCache is done")
 }
 
-func (rh *RepoHandler) AddDefaultRepo() {
-	klog.Infoln("Add default Chart repo")
+// func (rh *RepoHandler) AddDefaultRepo() {
+// 	rh.log.Info("Add default Chart repo")
 
-	// Read repositoryConfig File which contains repo Info list
-	// repoList, _ := readRepoList()
+// Read repositoryConfig File which contains repo Info list
+// repoList, _ := readRepoList()
 
-	// for _, repoInfo := range repoList.Repositories {
-	// 	if repoInfo.Name == "tmax-stable" {
-	// 		return
-	// 	}
+// for _, repoInfo := range repoList.Repositories {
+// 	if repoInfo.Name == "tmax-stable" {
+// 		return
+// 	}
 
-	// }
+// }
 
-	chartRepo := repo.Entry{
-		Name: "tmax-stable",
-		URL:  "https://tmax-cloud.github.io/helm-charts/stable",
-	}
+// chartRepo := repo.Entry{
+// 	Name: "tmax-stable",
+// 	URL:  "https://tmax-cloud.github.io/helm-charts/stable",
+// }
 
-	if err := rh.hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
-		klog.Errorln(err, "failed to add default tmax chart repo")
-		return
-	}
+// if err := rh.hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
+// 	klog.Errorln(err, "failed to add default tmax chart repo")
+// 	return
+// }
 
-	// if err := InsertChartsToDB(ch.col, chartRepo.Name, chartRepo.URL); err != nil {
-	// 	klog.Errorln(err, "inserting charts to DB is failed")
-	// }
+// if err := InsertChartsToDB(ch.col, chartRepo.Name, chartRepo.URL); err != nil {
+// 	klog.Errorln(err, "inserting charts to DB is failed")
+// }
 
-}
+// }
 
 func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("Add ChartRepo")
 	utils.SetResponseHeader(w)
 	req := &schemas.RepoRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
+		klog.V(1).Info(err, "failed to decode request")
 		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while decoding request",
@@ -100,7 +102,7 @@ func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList, _ := readRepoList()
+	repoList, _ := utils.ReadRepoList()
 	if repoList != nil {
 		var repoNames []string
 		// store repo names into repoNames slice
@@ -111,7 +113,6 @@ func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 		// Check if req repoName is already exist
 		for _, repoName := range repoNames {
 			if req.Name == repoName {
-				klog.Errorln(req.Name + " name repository is already exist")
 				utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 					Description: req.Name + " name repository is already exist",
 				})
@@ -140,7 +141,7 @@ func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rh.hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
-		klog.Errorln(err, "failed to add chart repo")
+		klog.V(1).Info(err, "failed to add chart repo")
 		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while adding helm repo",
@@ -149,7 +150,7 @@ func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read repositoryConfig File which contains repo Info list
-	afterRepoList, err := readRepoList()
+	afterRepoList, err := utils.ReadRepoList()
 	if err != nil {
 		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -183,16 +184,15 @@ func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	klog.Infoln(req.Name + " repo is successfully added")
+	klog.V(3).Info(req.Name + " repo is successfully added")
 	utils.Respond(w, http.StatusOK, req.Name+" repo is successfully added")
 }
 
 func (rh *RepoHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("Get chartRepos")
 	utils.SetResponseHeader(w)
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList, _ := readRepoList()
+	repoList, _ := utils.ReadRepoList()
 	if repoList == nil {
 		utils.Respond(w, http.StatusOK, &schemas.Error{
 			Error:       "No helm repository is added",
@@ -207,9 +207,9 @@ func (rh *RepoHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 
 	// set last updated time
 	for _, repo := range repoList.Repositories {
-		r_index, err := readRepoIndex(repo.Name)
+		r_index, err := utils.ReadRepoIndex(repo.Name)
 		if err != nil {
-			klog.Errorln(err, "failed to read index file")
+			klog.V(1).Info(err, "failed to read index file")
 		}
 		repo.LastUpdated = r_index.Generated
 		totalRepo.RepoInfo = append(totalRepo.RepoInfo, repo)
@@ -223,25 +223,24 @@ func (rh *RepoHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 				response.RepoInfo = append(response.RepoInfo, repo)
 			}
 		}
-		klog.Infoln("Get Chart repo is successfully done")
+		klog.V(3).Info("Get Chart repo is successfully done")
 		utils.Respond(w, http.StatusOK, response)
 		return
 	}
 	response.RepoInfo = totalRepo.RepoInfo
 
-	klog.Infoln("Get Chart repo is successfully done")
+	klog.V(3).Info("Get Chart repo is successfully done")
 	utils.Respond(w, http.StatusOK, response)
 }
 
 func (rh *RepoHandler) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("Delete chartRepos")
 	utils.SetResponseHeader(w)
 
 	vars := mux.Vars(r)
 	reqRepoName := vars["repo-name"]
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList, err := readRepoList()
+	repoList, err := utils.ReadRepoList()
 	if err != nil {
 		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -268,7 +267,7 @@ func (rh *RepoHandler) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
 
 	// Remove -charts.txt file
 	if err := os.Remove(repositoryCache + "/" + reqRepoName + chartsFileSuffix); err != nil {
-		klog.Errorln(err, "failed to remove charts.txt file")
+		klog.V(1).Info(err, "failed to remove charts.txt file")
 		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while removing charts.txt file",
@@ -278,7 +277,7 @@ func (rh *RepoHandler) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
 
 	// Remove -index.yaml file
 	if err := os.Remove(repositoryCache + "/" + reqRepoName + indexFileSuffix); err != nil {
-		klog.Errorln(err, "failed to remove index.yaml file")
+		klog.V(1).Info(err, "failed to remove index.yaml file")
 		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while removing index.yaml file",
@@ -286,16 +285,15 @@ func (rh *RepoHandler) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	klog.Infoln(reqRepoName + " is successfully removed")
+	klog.V(3).Info(reqRepoName + " is successfully removed")
 	utils.Respond(w, http.StatusOK, reqRepoName+" repo is successfully removed")
 }
 
 func (rh *RepoHandler) UpdateChartRepo(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("Update ChartRepo")
 	utils.SetResponseHeader(w)
 
 	// Read repositoryConfig File which contains repo Info list
-	repoList, err := readRepoList()
+	repoList, err := utils.ReadRepoList()
 	if err != nil {
 		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
@@ -318,14 +316,14 @@ func (rh *RepoHandler) UpdateChartRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rh.hcm.Hci.AddOrUpdateChartRepo(chartRepo); err != nil {
-		klog.Errorln(err, "failed to update chart repo")
+		klog.V(1).Info(err, "failed to update chart repo")
 		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while updating helm repo " + chartRepo.Name,
 		})
 		return
 	}
-	klog.Infoln(chartRepo.Name + " repo is successfully updated")
+	klog.V(3).Info(chartRepo.Name + " repo is successfully updated")
 
 	// ch.UpdateChartHandler()
 	utils.Respond(w, http.StatusOK, "repo update is successfully done")
@@ -335,7 +333,6 @@ func writeRepoList(repoList *schemas.RepositoryFile) error {
 	repoList.Generated = time.Now() // repo 삭제 후 발생하는 버그 방지
 	newRepoListFile, err := json.Marshal(repoList)
 	if err != nil {
-		klog.Errorln(err, "failed to marshal repo list")
 		return err
 	}
 
@@ -343,111 +340,73 @@ func writeRepoList(repoList *schemas.RepositoryFile) error {
 
 	// Update repository.yaml file without requested repo
 	if err := ioutil.WriteFile(repositoryConfig, newRepoListFileYaml, 0644); err != nil {
-		klog.Errorln(err, "failed to write new repo list file")
 		return err
 	}
 
 	return nil
 }
 
-func readRepoIndex(repoName string) (index *schemas.IndexFile, err error) {
-	index = &schemas.IndexFile{}
+// func getIndex() *schemas.IndexFile {
+// 	// Read repositoryConfig File which contains repo Info list
+// 	repoList, err := utils.ReadRepoList()
+// 	if err != nil {
+// 		klog.Errorln(err, "failed to save index file")
+// 		return nil
+// 	}
 
-	indexFile, err := ioutil.ReadFile(repositoryCache + "/" + repoName + indexFileSuffix)
-	if err != nil {
-		klog.Errorln(err, "failed to read index.yaml file of "+repoName)
-		return nil, err
-	}
+// 	repoInfos := make(map[string]string)
+// 	// store repo names
+// 	for _, repoInfo := range repoList.Repositories {
+// 		repoInfos[repoInfo.Name] = repoInfo.Url
+// 	}
 
-	indexFileJson, _ := yaml.YAMLToJSON(indexFile) // Should transform yaml to Json
+// 	index := &schemas.IndexFile{}
+// 	allEntries := make(map[string]schemas.ChartVersions)
+// 	// col := db.GetMongoDBConnetion() // #######테스트########
 
-	if err := json.Unmarshal(indexFileJson, index); err != nil {
-		klog.Errorln(err, "failed to unmarshal index file")
-		return nil, err
-	}
+// 	// read all index.yaml file and save only Entries
+// 	for repoName, repoUrl := range repoInfos {
+// 		if index, err = utils.ReadRepoIndex(repoName); err != nil {
+// 			klog.Errorln(err, "failed to read index file")
+// 		}
 
-	return index, nil
-}
+// 		// add repo info
+// 		for key, charts := range index.Entries {
+// 			for _, chart := range charts {
+// 				chart.Repo.Name = repoName
+// 				chart.Repo.Url = repoUrl
+// 				// _, err := db.InsertDoc(col, chart) // #######테스트########
+// 				// klog.Info("insert done!")
+// 				// if err != nil {
+// 				// 	klog.Error(err)
+// 				// }
+// 			}
+// 			allEntries[repoName+"_"+key] = charts // 중복 chart name 가능하도록 repo name과 결합
+// 		}
+// 	}
 
-func readRepoList() (repoList *schemas.RepositoryFile, err error) {
-	repoList = &schemas.RepositoryFile{}
-	repoListFile, err := ioutil.ReadFile(repositoryConfig)
-	if err != nil {
-		klog.Errorln(err, "failed to get repository list")
-		return nil, err
-	}
+// 	// filter := bson.D{{}}
+// 	// var test []schemas.ChartVersion
+// 	// test, _ = db.FindDoc(col, filter, filter)
+// 	// for _, ch := range test {
+// 	// 	klog.Info(ch.Name)
+// 	// }
 
-	repoListFileJson, _ := yaml.YAMLToJSON(repoListFile) // Should transform yaml to Json
+// 	index.Entries = allEntries
+// 	klog.Info("saving index file is done")
+// 	return index
+// }
 
-	if err = json.Unmarshal(repoListFileJson, repoList); err != nil {
-		klog.Errorln(err, "failed to unmarshal repo file")
-		return nil, err
-	}
+// func getSingleChart(index *schemas.IndexFile) map[string]schemas.ChartVersions {
+// 	if index == nil {
+// 		return nil
+// 	}
 
-	return repoList, nil
-}
-
-func getIndex() *schemas.IndexFile {
-	// Read repositoryConfig File which contains repo Info list
-	repoList, err := utils.ReadRepoList()
-	if err != nil {
-		klog.Errorln(err, "failed to save index file")
-		return nil
-	}
-
-	repoInfos := make(map[string]string)
-	// store repo names
-	for _, repoInfo := range repoList.Repositories {
-		repoInfos[repoInfo.Name] = repoInfo.Url
-	}
-
-	index := &schemas.IndexFile{}
-	allEntries := make(map[string]schemas.ChartVersions)
-	// col := db.GetMongoDBConnetion() // #######테스트########
-
-	// read all index.yaml file and save only Entries
-	for repoName, repoUrl := range repoInfos {
-		if index, err = utils.ReadRepoIndex(repoName); err != nil {
-			klog.Errorln(err, "failed to read index file")
-		}
-
-		// add repo info
-		for key, charts := range index.Entries {
-			for _, chart := range charts {
-				chart.Repo.Name = repoName
-				chart.Repo.Url = repoUrl
-				// _, err := db.InsertDoc(col, chart) // #######테스트########
-				// klog.Info("insert done!")
-				// if err != nil {
-				// 	klog.Error(err)
-				// }
-			}
-			allEntries[repoName+"_"+key] = charts // 중복 chart name 가능하도록 repo name과 결합
-		}
-	}
-
-	// filter := bson.D{{}}
-	// var test []schemas.ChartVersion
-	// test, _ = db.FindDoc(col, filter, filter)
-	// for _, ch := range test {
-	// 	klog.Info(ch.Name)
-	// }
-
-	index.Entries = allEntries
-	klog.Info("saving index file is done")
-	return index
-}
-
-func getSingleChart(index *schemas.IndexFile) map[string]schemas.ChartVersions {
-	if index == nil {
-		return nil
-	}
-
-	singleChartEntries := make(map[string]schemas.ChartVersions)
-	for key, charts := range index.Entries {
-		var oneChart []*schemas.ChartVersion
-		oneChart = append(oneChart, charts[0])
-		singleChartEntries[key] = oneChart
-	}
-	return singleChartEntries
-}
+// 	singleChartEntries := make(map[string]schemas.ChartVersions)
+// 	for key, charts := range index.Entries {
+// 		var oneChart []*schemas.ChartVersion
+// 		oneChart = append(oneChart, charts[0])
+// 		singleChartEntries[key] = oneChart
+// 	}
+// 	return singleChartEntries
+// }

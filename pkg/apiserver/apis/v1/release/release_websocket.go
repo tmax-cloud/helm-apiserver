@@ -93,10 +93,10 @@ var hub *Hub
 
 // serveWs handles websocket requests from the peer.
 func (sh *ReleaseHandler) Websocket(w http.ResponseWriter, r *http.Request) {
-	klog.Info("Start websocket connection")
+	klog.V(3).Info("Start websocket connection")
 	conn, err := utils.UpgradeWebsocket(w, r)
 	if err != nil {
-		klog.Errorln(err)
+		klog.V(1).Info(err, "Websocket upgrade is failed")
 		return
 	}
 
@@ -121,7 +121,7 @@ func (c *Client) readPump() {
 		_, _, err := c.conn.ReadMessage() // message 필요한 상황을 위해 남겨둠
 		if err != nil {
 			if gsocket.IsUnexpectedCloseError(err, gsocket.CloseGoingAway, gsocket.CloseAbnormalClosure) {
-				klog.Info(err)
+				klog.V(1).Info(err, "websocket is closed")
 			}
 			break
 		}
@@ -132,9 +132,9 @@ func (c *Client) readPump() {
 
 		c.conn.WriteMessage(gsocket.TextMessage, respMsg)
 		if err != nil {
-			klog.Error(err)
+			klog.V(1).Info(err, "writing message is failed")
 			if gsocket.IsUnexpectedCloseError(err, gsocket.CloseGoingAway, gsocket.CloseAbnormalClosure) {
-				klog.Error(err)
+				klog.V(1).Info(err, "websocket is closed")
 			}
 			break
 		}
@@ -155,7 +155,7 @@ func (c *Client) writePump() {
 		}
 		t, err := json.Marshal(message)
 		if err != nil {
-			klog.Info(err)
+			klog.V(1).Info(err, "writing message is failed")
 			return
 		}
 		c.conn.WriteMessage(gsocket.TextMessage, t)

@@ -7,7 +7,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/klog"
 
 	authorization "k8s.io/api/authorization/v1"
 )
@@ -36,8 +35,6 @@ var (
 
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemaGroupVersion)
-	klog.Info("is group registered..???")
-	klog.Info(scheme.IsGroupRegistered(APIGroup))
 	return nil
 }
 

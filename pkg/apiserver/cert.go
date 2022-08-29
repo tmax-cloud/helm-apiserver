@@ -70,6 +70,27 @@ func createCert(ctx context.Context, client client.Client) error {
 	return nil
 }
 
+func updateCaBundle(ctx context.Context, client client.Client) error {
+
+	// Write certs to file
+	caCrt, err := ioutil.ReadFile(path.Join(certDir, "ca.crt"))
+	if err != nil {
+		return err
+	}
+
+	// Update ApiService
+	apiService := &apiregv1.APIService{}
+	if err := client.Get(ctx, types.NamespacedName{Name: APIServiceName}, apiService); err != nil {
+		return err
+	}
+	apiService.Spec.CABundle = caCrt
+	if err := client.Update(ctx, apiService); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func tlsConfig(ctx context.Context, client client.Client) (*tls.Config, error) {
 	caPool, err := getCAPool(ctx, client)
 	if err != nil {

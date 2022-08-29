@@ -16,8 +16,7 @@ const (
 )
 
 type ReleaseHandler struct {
-	hcm *hclient.HelmClientManager
-
+	hcm        *hclient.HelmClientManager
 	authorizer apiserver.Authorizer
 }
 
@@ -52,7 +51,7 @@ func NewHandler(parent wrapper.RouterWrapper, hcm *hclient.HelmClientManager, au
 	}
 
 	// /v1/namespaces/<namespace>/releases/websocket
-	releaseWebsocketWrapper := wrapper.New(fmt.Sprintf("/%s/%s", "releases", "websocket"), []string{http.MethodConnect}, releaseHandler.Websocket)
+	releaseWebsocketWrapper := wrapper.New(fmt.Sprintf("/%s/%s", "releases", "websocket"), []string{http.MethodGet}, releaseHandler.Websocket)
 	if err := namespaceWrapper.Add(releaseWebsocketWrapper); err != nil {
 		return nil, err
 	}

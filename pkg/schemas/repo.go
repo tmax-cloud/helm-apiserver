@@ -23,15 +23,15 @@ type RepositoryFile struct {
 }
 
 type Repository struct {
-	CaFile                   string `json:"caFile,omitempty"`
-	CertFile                 string `json:"certFile,omitempty"`
-	Insecure_skip_tls_verify bool
-	KeyFile                  string `json:"keyFile,omitempty"`
-	Name                     string `json:"name,omitempty"`
-	Pass_credentials_all     bool   `json:"pass_credentials_all,omitempty"`
-	Password                 string
-	Url                      string `json:"url,omitempty"`
-	UserName                 string
+	CaFile                   string    `json:"-"`
+	CertFile                 string    `json:"-"`
+	Insecure_skip_tls_verify bool      `json:"-"`
+	KeyFile                  string    `json:"-"`
+	Name                     string    `json:"name,omitempty"`
+	Pass_credentials_all     bool      `json:"-"`
+	Password                 string    `json:"-"`
+	Url                      string    `json:"url,omitempty"`
+	UserName                 string    `json:"-"`
 	LastUpdated              time.Time `json:"lastupdated,omitempty"`
 }
 
