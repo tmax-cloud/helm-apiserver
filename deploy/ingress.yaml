@@ -10,13 +10,16 @@ metadata:
 spec:
   ingressClassName: tmax-cloud
   rules:
-  - host: {consoleHost} # HyperCloud console host
+  - host: helm.tmaxcloud.org # helm-subdomain.hypercloud-domain
     http:
       paths:
       - backend:
           service:
             name: helm-apiserver
             port: 
-              number: 80
+              number: 443
         path: /
         pathType: Prefix
+  tls:
+  - hosts:
+    - helm.tmaxcloud.org # helm-subdomain.hypercloud-domain

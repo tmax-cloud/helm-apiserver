@@ -9,5 +9,5 @@ spec:
       storage: 1Gi # 임시
   volumeMode: Filesystem
   accessModes:
-  - ReadWriteOnce # 임시. 바꿔줘야함.
+  - ReadWriteMany
   storageClassName: local-path # 임시. 환경 스토리지클래스 확인할 것

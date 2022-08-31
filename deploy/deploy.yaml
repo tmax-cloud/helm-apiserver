@@ -1,16 +1,53 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: helm-apiserver-cert
+  namespace: helm-ns
+spec:
+  secretName: helm-apiserver-cert
+  isCA: false
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+  dnsNames:
+    - helm-apiserver.helm-ns.svc
+    - helm-apiserver.helm-ns
+    - helm-apiserver.helm-ns.svc.cluster.local
+  issuerRef:
+    kind: ClusterIssuer
+    group: cert-manager.io
+    name: tmaxcloud-issuer
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1.helmapi.tmax.io
+spec:
+  group: helmapi.tmax.io
+  groupPriorityMinimum: 1000
+  versionPriority: 15
+  service:
+    namespace: helm-ns
+    name: helm-apiserver
+  version: v1
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: helm-apiserver
   namespace: helm-ns
+  annotations:
+    traefik.ingress.kubernetes.io/service.serverstransport: insecure@file
 spec:
   selector:
     app: helm-apiserver
   ports:
-  - name: http
+  - name: https
     protocol: TCP
-    port: 80
-    targetPort: 8081
+    port: 443
+    targetPort: 8443
   type: ClusterIP # ingress 설치 기준
 ---
 apiVersion: apps/v1
@@ -33,15 +70,20 @@ spec:
       serviceAccountName: helm-apiserver-sa
       containers:
       - name: helm-apiserver
-        image: docker.io/tmaxcloudck/helm-apiserver:0.0.0 # image name : helm-apiserver
+        image: docker.io/tmaxcloudck/helm-apiserver:0.0.1 # image name : helm-apiserver
         imagePullPolicy: Always
         volumeMounts:
           - name: helm-apiserver-data
             mountPath: /tmp 
+          - name: helm-apiserver-cert
+            mountPath: /tmp/cert
       volumes:
       - name: helm-apiserver-data
         persistentVolumeClaim:
           claimName: helm-apiserver-pvc
+      - name: helm-apiserver-cert
+        secret:
+          secretName: helm-apiserver-cert
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -56,9 +98,53 @@ kind: ClusterRole
 metadata:
   name: helm-apiserver-role
 rules:
-- apiGroups: ["*"]
-  resources: ["*"]
-  verbs: ["*"]
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apiregistration.k8s.io
+  resources:
+  - apiservices
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+  - delete
+- apiGroups:
+  - helmapi.tmax.io
+  resources:
+  - "*"
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
