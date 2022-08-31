@@ -1,42 +1,73 @@
-package apis
+package release
 
 import (
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"os"
+	"regexp"
 
 	"strings"
 
 	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
 	"github.com/jinzhu/copier"
-
-	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
-
+	yamlv3 "gopkg.in/yaml.v3"
 	"k8s.io/klog"
+
+	"github.com/tmax-cloud/helm-apiserver/internal/utils"
+	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
 
 	helmclient "github.com/mittwald/go-helm-client"
 )
 
+func (sh *ReleaseHandler) releaseHandler(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	_, ns := vars["ns-name"]
+	_, rel := vars["release-name"]
+
+	switch {
+	case ns && !rel:
+		if req.Method == http.MethodPost {
+			sh.InstallRelease(w, req)
+		}
+
+		if req.Method == http.MethodGet {
+			sh.GetReleases(w, req)
+		}
+	case ns && rel:
+		if req.Method == http.MethodPut {
+			sh.UpgradeRelease(w, req)
+		}
+		if req.Method == http.MethodDelete {
+			sh.UnInstallRelease(w, req)
+		}
+		if req.Method == http.MethodGet {
+			sh.GetReleases(w, req)
+		}
+	case !ns:
+		sh.GetAllReleases(w, req)
+	}
+}
+
 // Get all-namespace 구현
-func (hcm *HelmClientManager) GetAllReleases(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("Get All Releases")
-	setResponseHeader(w)
+func (sh *ReleaseHandler) GetAllReleases(w http.ResponseWriter, r *http.Request) {
+	utils.SetResponseHeader(w)
 
 	// bearerToken := r.Header.Get("authorization")
 
 	// All NameSpace 설정
-	if err := hcm.SetClientNS(""); err != nil {
-		klog.Errorln("Error occurs while setting namespace")
+	if err := sh.hcm.SetClientNS(""); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
 		return
 	}
 
 	// Release List 받아오기
-	releases, err := hcm.Hci.ListDeployedReleases()
+	releases, err := sh.hcm.Hci.ListDeployedReleases()
 	if err != nil {
-		klog.Errorln(err, "failed to get helm release list")
-		respond(w, http.StatusBadRequest, &schemas.Error{
+		klog.V(1).Info(err, "failed to get helm release list")
+		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while getting helm release list",
 		})
@@ -54,7 +85,7 @@ func (hcm *HelmClientManager) GetAllReleases(w http.ResponseWriter, r *http.Requ
 	// customReleases에 Objects 필드 값 추가
 	for _, rel := range customReleases {
 		if err := setObjectsInfo(rel); err != nil {
-			klog.Errorln(err, "Error occurs while setting Obejcts field")
+			klog.V(1).Info(err, "Error occurs while setting Obejcts field")
 		}
 	}
 
@@ -74,27 +105,25 @@ func (hcm *HelmClientManager) GetAllReleases(w http.ResponseWriter, r *http.Requ
 		response.Release = append(response.Release, *rel)
 	}
 
-	respond(w, http.StatusOK, response)
+	utils.Respond(w, http.StatusOK, response)
 }
 
-func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("GetRelease")
-	setResponseHeader(w)
+func (sh *ReleaseHandler) GetReleases(w http.ResponseWriter, r *http.Request) {
+	utils.SetResponseHeader(w)
 	// bearerToken := r.Header.Get("authorization")
-	// klog.Info(tokenTest)
 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
 
-	if err := hcm.SetClientNS(namespace); err != nil {
-		klog.Errorln("Error occurs while setting namespace")
+	if err := sh.hcm.SetClientNS(namespace); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
 		return
 	}
 
-	releases, err := hcm.Hci.ListDeployedReleases()
+	releases, err := sh.hcm.Hci.ListDeployedReleases()
 	if err != nil {
-		klog.Errorln(err, "failed to get helm release list")
-		respond(w, http.StatusBadRequest, &schemas.Error{
+		klog.V(1).Info(err, "failed to get helm release list")
+		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while getting helm release list",
 		})
@@ -110,7 +139,7 @@ func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request
 
 	for _, rel := range customReleases {
 		if err := setObjectsInfo(rel); err != nil {
-			klog.Errorln(err, "Error occurs while setting Obejcts field")
+			klog.V(1).Info(err, "Error occurs while setting Obejcts field")
 		}
 	}
 
@@ -123,7 +152,7 @@ func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		respond(w, http.StatusOK, response)
+		utils.Respond(w, http.StatusOK, response)
 		return
 	}
 
@@ -142,22 +171,20 @@ func (hcm *HelmClientManager) GetReleases(w http.ResponseWriter, r *http.Request
 		response.Release = append(response.Release, *rel)
 	}
 
-	respond(w, http.StatusOK, response)
+	utils.Respond(w, http.StatusOK, response)
 }
 
-func (hcm *HelmClientManager) GetReleasesForWS(ns string) *schemas.ReleaseResponse {
-	klog.Infoln("GetRelease")
+func (sh *ReleaseHandler) GetReleasesForWS(ns string) *schemas.ReleaseResponse {
 	// bearerToken := r.Header.Get("authorization")
-	// klog.Info(tokenTest)
 
-	if err := hcm.SetClientNS(ns); err != nil {
-		klog.Errorln("Error occurs while setting namespace")
+	if err := sh.hcm.SetClientNS(ns); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
 		return nil
 	}
 
-	releases, err := hcm.Hci.ListDeployedReleases()
+	releases, err := sh.hcm.Hci.ListDeployedReleases()
 	if err != nil {
-		klog.Errorln(err, "failed to get helm release list")
+		klog.V(1).Info(err, "failed to get helm release list")
 		return nil
 	}
 
@@ -170,7 +197,7 @@ func (hcm *HelmClientManager) GetReleasesForWS(ns string) *schemas.ReleaseRespon
 
 	for _, rel := range customReleases {
 		if err := setObjectsInfo(rel); err != nil {
-			klog.Errorln(err, "Error occurs while setting Obejcts field")
+			klog.V(1).Info(err, "Error occurs while setting Obejcts field")
 		}
 	}
 
@@ -183,14 +210,12 @@ func (hcm *HelmClientManager) GetReleasesForWS(ns string) *schemas.ReleaseRespon
 	return response
 }
 
-func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("InstallRelease")
-	setResponseHeader(w)
-	// bearerToken := r.Header.Get("authorization")
+func (sh *ReleaseHandler) InstallRelease(w http.ResponseWriter, r *http.Request) {
+	utils.SetResponseHeader(w)
 	req := schemas.ReleaseRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		respond(w, http.StatusBadRequest, &schemas.Error{
+		klog.V(1).Info(err, "failed to decode request")
+		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while decoding request",
 		})
@@ -199,62 +224,68 @@ func (hcm *HelmClientManager) InstallRelease(w http.ResponseWriter, r *http.Requ
 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
-
-	if err := hcm.SetClientNS(namespace); err != nil {
-		klog.Errorln("Error occurs while setting namespace")
+	bearerToken := r.Header.Get("authorization")
+	tokenValue := strings.TrimPrefix(bearerToken, "Bearer ")
+	if err := sh.hcm.SetClientTokenNS(namespace, tokenValue); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
 		return
 	}
+
+	values := trimComments(req.Values)
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: req.ReleaseName,
 		ChartName:   req.PackageURL,
 		Namespace:   namespace,
-		ValuesYaml:  req.Values,
+		ValuesYaml:  values,
 		Version:     req.Version,
 		UpgradeCRDs: true,
 		Wait:        false,
 	}
 
-	releases, err := hcm.Hci.ListDeployedReleases()
+	releases, err := sh.hcm.Hci.ListDeployedReleases()
 	if err != nil {
-		klog.Errorln(err, "failed to get helm release list")
+		klog.V(1).Info(err, "failed to get helm release list")
 	}
 	for _, rel := range releases {
 		if rel.Name == req.ReleaseName {
-			respond(w, http.StatusBadRequest, &schemas.Error{
+			utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 				Description: req.ReleaseName + " release is already exist",
 			})
 			return
 		}
 	}
 
-	if _, err := hcm.Hci.InstallOrUpgradeChart(context.Background(), &chartSpec); err != nil {
-		klog.Errorln(err, "failed to install release")
-		respond(w, http.StatusBadRequest, &schemas.Error{
+	if _, err := sh.hcm.Hci.InstallOrUpgradeChart(context.Background(), &chartSpec); err != nil {
+		klog.V(1).Info(err, "failed to install release")
+		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while installing helm release",
 		})
 		return
 	}
 
-	respond(w, http.StatusOK, req.ReleaseName+" release is successfully installed")
+	utils.Respond(w, http.StatusOK, req.ReleaseName+" release is successfully installed")
+
+	if err := sh.hcm.SetDefaultToken(namespace); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
+		return
+	}
 
 	// 일단 all-ns 로 보내고 hub에서 filtering
 	if len(hub.clients) > 0 {
-		releaseList := hcm.GetReleasesForWS("")
+		releaseList := sh.GetReleasesForWS("")
 		hub.broadcast <- *releaseList
 	}
-
+	removeCacheFile()
 }
 
-func (hcm *HelmClientManager) UpgradeRelease(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("Upgrade Release")
-	setResponseHeader(w)
-	// bearerToken := r.Header.Get("authorization")
+func (sh *ReleaseHandler) UpgradeRelease(w http.ResponseWriter, r *http.Request) {
+	utils.SetResponseHeader(w)
 	req := schemas.ReleaseRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		respond(w, http.StatusBadRequest, &schemas.Error{
+		klog.V(1).Info(err, "failed to decode request")
+		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while decoding request",
 		})
@@ -263,51 +294,57 @@ func (hcm *HelmClientManager) UpgradeRelease(w http.ResponseWriter, r *http.Requ
 
 	vars := mux.Vars(r)
 	namespace := vars["ns-name"]
-
-	if err := hcm.SetClientNS(namespace); err != nil {
-		klog.Errorln("Error occurs while setting namespace")
+	bearerToken := r.Header.Get("authorization")
+	tokenValue := strings.TrimPrefix(bearerToken, "Bearer ")
+	if err := sh.hcm.SetClientTokenNS(namespace, tokenValue); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
 		return
 	}
+
+	values := trimComments(req.Values)
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: req.ReleaseName,
 		ChartName:   req.PackageURL,
 		Namespace:   namespace,
-		ValuesYaml:  req.Values,
+		ValuesYaml:  values,
 		Version:     req.Version,
 		UpgradeCRDs: true,
 		Wait:        false,
 	}
 
-	// [TODO] Release 중복 이름 check
-	if _, err := hcm.Hci.InstallOrUpgradeChart(context.Background(), &chartSpec); err != nil {
-		klog.Errorln(err, "failed to upgrade release")
-		respond(w, http.StatusBadRequest, &schemas.Error{
+	if _, err := sh.hcm.Hci.InstallOrUpgradeChart(context.Background(), &chartSpec); err != nil {
+		klog.V(1).Info(err, "failed to upgrade release")
+		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while upgrading helm release",
 		})
 		return
 	}
 
-	respond(w, http.StatusOK, req.ReleaseName+" release is successfully upgraded")
+	utils.Respond(w, http.StatusOK, req.ReleaseName+" release is successfully upgraded")
+
+	if err := sh.hcm.SetDefaultToken(namespace); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
+		return
+	}
 
 	// 일단 all-ns 로 보내고 hub에서 filtering
 	if len(hub.clients) > 0 {
-		releaseList := hcm.GetReleasesForWS("")
+		releaseList := sh.GetReleasesForWS("")
 		hub.broadcast <- *releaseList
 	}
-
+	removeCacheFile()
 }
 
 // 일단 안씀
-func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("Rollback Release")
+func (sh *ReleaseHandler) RollbackRelease(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	// bearerToken := r.Header.Get("authorization")
 	req := schemas.ReleaseRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		klog.Errorln(err, "failed to decode request")
-		respond(w, http.StatusBadRequest, &schemas.Error{
+		klog.V(1).Info(err, "failed to decode request")
+		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while decoding request",
 		})
@@ -318,8 +355,8 @@ func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Req
 	namespace := vars["ns-name"]
 	reqReleaseName := vars["release-name"]
 
-	if err := hcm.SetClientNS(namespace); err != nil {
-		klog.Errorln("Error occurs while setting namespace")
+	if err := sh.hcm.SetClientNS(namespace); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
 		return
 	}
 
@@ -327,71 +364,57 @@ func (hcm *HelmClientManager) RollbackRelease(w http.ResponseWriter, r *http.Req
 		ReleaseName: reqReleaseName,
 		ChartName:   req.PackageURL,
 		Namespace:   namespace,
-		ValuesYaml:  req.Values,
+		ValuesYaml:  string(req.Values),
 		Version:     req.Version,
 		UpgradeCRDs: true,
 		Wait:        false,
 	}
 
-	if err := hcm.Hci.RollbackRelease(&chartSpec, 0); err != nil {
-		klog.Errorln(err, "failed to rollback chart")
-		respond(w, http.StatusBadRequest, &schemas.Error{
+	if err := sh.hcm.Hci.RollbackRelease(&chartSpec, 0); err != nil {
+		klog.V(1).Info(err, "failed to rollback chart")
+		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while rollback helm release",
 		})
 	}
 
-	respond(w, http.StatusOK, reqReleaseName+" release is successfully rollbacked")
+	utils.Respond(w, http.StatusOK, reqReleaseName+" release is successfully rollbacked")
 }
 
-func (hcm *HelmClientManager) UnInstallRelease(w http.ResponseWriter, r *http.Request) {
-	klog.Infoln("UnInstallRelease")
-	setResponseHeader(w)
-	// bearerToken := r.Header.Get("authorization")
+func (sh *ReleaseHandler) UnInstallRelease(w http.ResponseWriter, r *http.Request) {
+	utils.SetResponseHeader(w)
 
 	vars := mux.Vars(r)
-	namespace := vars["ns-name"]
 	reqReleaseName := vars["release-name"]
-
-	if err := hcm.SetClientNS(namespace); err != nil {
-		klog.Errorln("Error occurs while setting namespace")
+	namespace := vars["ns-name"]
+	bearerToken := r.Header.Get("authorization")
+	tokenValue := strings.TrimPrefix(bearerToken, "Bearer ")
+	if err := sh.hcm.SetClientTokenNS(namespace, tokenValue); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
 		return
 	}
 
-	if err := hcm.Hci.UninstallReleaseByName(reqReleaseName); err != nil {
-		klog.Errorln(err, "failed to uninstall chart")
-		respond(w, http.StatusBadRequest, &schemas.Error{
+	if err := sh.hcm.Hci.UninstallReleaseByName(reqReleaseName); err != nil {
+		klog.V(1).Info(err, "failed to uninstall chart")
+		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 			Error:       err.Error(),
 			Description: "Error occurs while uninstalling helm release",
 		})
 		return
 	}
 
-	respond(w, http.StatusOK, reqReleaseName+" release is successfully uninstalled")
+	utils.Respond(w, http.StatusOK, reqReleaseName+" release is successfully uninstalled")
+
+	if err := sh.hcm.SetDefaultToken(namespace); err != nil {
+		klog.V(1).Info(err, "Error occurs while setting namespace")
+		return
+	}
 
 	// 일단 all-ns 로 보내고 hub에서 filtering
 	if len(hub.clients) > 0 {
-		releaseList := hcm.GetReleasesForWS("")
+		releaseList := sh.GetReleasesForWS("")
 		hub.broadcast <- *releaseList
-
 	}
-}
-
-func respond(w http.ResponseWriter, statusCode int, body interface{}) {
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		klog.Errorln(err, "Error occurs while encoding response body")
-	}
-}
-
-// CORS 에러로 인해 header 추가 21.04.19
-func setResponseHeader(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS") // Method 각각 써줘야 할것 같음
-	w.Header().Set("Access-Control-Allow-Headers", "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version")
-
 }
 
 // Response에 생성된 object kind 및 name 추가 하기 위함
@@ -430,4 +453,26 @@ func searchRelease(searcher string, input []*schemas.Release) (output []*schemas
 		}
 	}
 	return filtered
+}
+
+func trimComments(input string) string {
+	// values 시작 부분 특수문자 제거
+	re := regexp.MustCompile(`[|<>]+`)
+	key := re.ReplaceAllString(input, "")
+
+	// remove comments in values.yaml file
+	temp := make(map[string]interface{})
+	_ = yamlv3.Unmarshal([]byte(key), &temp)
+	values, _ := yamlv3.Marshal(temp)
+
+	return string(values)
+}
+
+func removeCacheFile() {
+	fs, _ := os.ReadDir(repositoryCache)
+	for _, f := range fs {
+		if strings.HasSuffix(f.Name(), "tgz") {
+			os.Remove(repositoryCache + "/" + f.Name())
+		}
+	}
 }
