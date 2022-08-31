@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"os"
+	"regexp"
 
 	"strings"
 
@@ -229,16 +231,13 @@ func (sh *ReleaseHandler) InstallRelease(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// remove comments in values.yaml file
-	temp := make(map[string]interface{})
-	_ = yamlv3.Unmarshal([]byte(req.Values), &temp)
-	values, _ := yamlv3.Marshal(temp)
+	values := trimComments(req.Values)
 
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: req.ReleaseName,
 		ChartName:   req.PackageURL,
 		Namespace:   namespace,
-		ValuesYaml:  string(values),
+		ValuesYaml:  values,
 		Version:     req.Version,
 		UpgradeCRDs: true,
 		Wait:        false,
@@ -278,7 +277,7 @@ func (sh *ReleaseHandler) InstallRelease(w http.ResponseWriter, r *http.Request)
 		releaseList := sh.GetReleasesForWS("")
 		hub.broadcast <- *releaseList
 	}
-
+	removeCacheFile()
 }
 
 func (sh *ReleaseHandler) UpgradeRelease(w http.ResponseWriter, r *http.Request) {
@@ -302,11 +301,13 @@ func (sh *ReleaseHandler) UpgradeRelease(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	values := trimComments(req.Values)
+
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: req.ReleaseName,
 		ChartName:   req.PackageURL,
 		Namespace:   namespace,
-		ValuesYaml:  req.Values,
+		ValuesYaml:  values,
 		Version:     req.Version,
 		UpgradeCRDs: true,
 		Wait:        false,
@@ -333,6 +334,7 @@ func (sh *ReleaseHandler) UpgradeRelease(w http.ResponseWriter, r *http.Request)
 		releaseList := sh.GetReleasesForWS("")
 		hub.broadcast <- *releaseList
 	}
+	removeCacheFile()
 }
 
 // 일단 안씀
@@ -362,7 +364,7 @@ func (sh *ReleaseHandler) RollbackRelease(w http.ResponseWriter, r *http.Request
 		ReleaseName: reqReleaseName,
 		ChartName:   req.PackageURL,
 		Namespace:   namespace,
-		ValuesYaml:  req.Values,
+		ValuesYaml:  string(req.Values),
 		Version:     req.Version,
 		UpgradeCRDs: true,
 		Wait:        false,
@@ -451,4 +453,26 @@ func searchRelease(searcher string, input []*schemas.Release) (output []*schemas
 		}
 	}
 	return filtered
+}
+
+func trimComments(input string) string {
+	// values 시작 부분 특수문자 제거
+	re := regexp.MustCompile(`[|<>]+`)
+	key := re.ReplaceAllString(input, "")
+
+	// remove comments in values.yaml file
+	temp := make(map[string]interface{})
+	_ = yamlv3.Unmarshal([]byte(key), &temp)
+	values, _ := yamlv3.Marshal(temp)
+
+	return string(values)
+}
+
+func removeCacheFile() {
+	fs, _ := os.ReadDir(repositoryCache)
+	for _, f := range fs {
+		if strings.HasSuffix(f.Name(), "tgz") {
+			os.Remove(repositoryCache + "/" + f.Name())
+		}
+	}
 }

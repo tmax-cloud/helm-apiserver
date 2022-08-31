@@ -9,6 +9,7 @@ import (
 	"github.com/tmax-cloud/helm-apiserver/internal/utils"
 	"github.com/tmax-cloud/helm-apiserver/internal/wrapper"
 	"github.com/tmax-cloud/helm-apiserver/pkg/schemas"
+	"helm.sh/helm/v3/pkg/repo"
 
 	"github.com/tmax-cloud/helm-apiserver/pkg/apiserver/apis/v1/chart"
 	authorization "k8s.io/client-go/kubernetes/typed/authorization/v1"
@@ -36,6 +37,7 @@ type RepoCache struct {
 
 func NewHandler(parent wrapper.RouterWrapper, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, chartCache *chart.ChartCache) (apiserver.APIHandler, error) {
 	repoHandler := &RepoHandler{hcm: hcm, ChartCache: chartCache, RepoCache: nil}
+	repoHandler.updateRepoCache()
 	repoHandler.initRepoCache()
 
 	// Authorizer
@@ -56,7 +58,8 @@ func NewHandler(parent wrapper.RouterWrapper, hcm *hclient.HelmClientManager, au
 	return repoHandler, nil
 }
 
-func (rh *RepoHandler) initRepoCache() {
+func (rh *RepoHandler) updateRepoCache() {
+	var repoInfos []schemas.Repository
 	repoList, _ := utils.ReadRepoList()
 	if repoList == nil {
 		return
@@ -65,11 +68,25 @@ func (rh *RepoHandler) initRepoCache() {
 	for _, repo := range repoList.Repositories {
 		r_index, _ := utils.ReadRepoIndex(repo.Name)
 		if r_index == nil {
-			return
+			continue
 		}
 		repo.LastUpdated = r_index.Generated
+		repoInfos = append(repoInfos, repo)
 	}
 
-	repoCache := &RepoCache{Repositories: repoList.Repositories}
+	repoCache := &RepoCache{Repositories: repoInfos}
 	rh.RepoCache = repoCache
+}
+
+// 재기동시 레포 사라지는 버그 방지
+func (rh *RepoHandler) initRepoCache() {
+	chartRepo := repo.Entry{}
+	for _, re := range rh.Repositories {
+		chartRepo.Name = re.Name
+		chartRepo.URL = re.Url
+		chartRepo.Username = re.UserName
+		chartRepo.Password = re.Password
+		chartRepo.InsecureSkipTLSverify = true
+		rh.hcm.Hci.AddOrUpdateChartRepo(chartRepo)
+	}
 }

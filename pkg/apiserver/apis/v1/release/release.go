@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	APIVersion = "v1"
+	APIVersion      = "v1"
+	repositoryCache = "/tmp/.helmcache"
 )
 
 type ReleaseHandler struct {

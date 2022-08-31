@@ -183,6 +183,7 @@ func getChartInfo(ch *ChartHandler, chart *schemas.ChartVersion) (schemas.ChartV
 	helmChart, filePath, err := ch.getChart(chartPath, &action.ChartPathOptions{
 		InsecureSkipTLSverify: true,
 	})
+
 	defer os.Remove(filePath)
 
 	var values []byte
@@ -193,7 +194,7 @@ func getChartInfo(ch *ChartHandler, chart *schemas.ChartVersion) (schemas.ChartV
 		for _, file := range helmChart.Raw {
 			if file.Name == "values.yaml" {
 				values = file.Data
-			}
+			} // 파일 이름 values.yaml 이 아닐경우 처리 필요
 		}
 	}
 

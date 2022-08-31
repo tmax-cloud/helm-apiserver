@@ -37,21 +37,23 @@ func (rh *RepoHandler) repoHandler(w http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodPut {
 			rh.UpdateChartRepo(w, req)
 			rh.UpdateChartCache()
+			rh.updateRepoCache()
 		}
 		if req.Method == http.MethodDelete {
 			rh.DeleteChartRepo(w, req)
 			rh.UpdateChartCache()
+			rh.updateRepoCache()
 		}
 	case !rel:
 		if req.Method == http.MethodPost {
 			rh.AddChartRepo(w, req)
 			rh.UpdateChartCache()
+			rh.updateRepoCache()
 		}
 		if req.Method == http.MethodGet {
 			rh.GetChartRepos(w, req)
 		}
 	}
-
 }
 
 func (rh *RepoHandler) UpdateChartCache() {
@@ -190,10 +192,7 @@ func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 
 func (rh *RepoHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 	utils.SetResponseHeader(w)
-
-	// Read repositoryConfig File which contains repo Info list
-	repoList, _ := utils.ReadRepoList()
-	if repoList == nil {
+	if len(rh.Repositories) == 0 {
 		utils.Respond(w, http.StatusOK, &schemas.Error{
 			Error:       "No helm repository is added",
 			Description: "you need to add at least one helm repository",
@@ -202,23 +201,12 @@ func (rh *RepoHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set Response with repo Info list
-	totalRepo := &schemas.RepoResponse{}
 	response := &schemas.RepoResponse{}
-
-	// set last updated time
-	for _, repo := range repoList.Repositories {
-		r_index, err := utils.ReadRepoIndex(repo.Name)
-		if err != nil {
-			klog.V(1).Info(err, "failed to read index file")
-		}
-		repo.LastUpdated = r_index.Generated
-		totalRepo.RepoInfo = append(totalRepo.RepoInfo, repo)
-	}
 
 	vars := mux.Vars(r)
 	reqRepoName, exist := vars["repo-name"]
 	if exist {
-		for _, repo := range totalRepo.RepoInfo {
+		for _, repo := range rh.Repositories {
 			if repo.Name == reqRepoName {
 				response.RepoInfo = append(response.RepoInfo, repo)
 			}
@@ -227,8 +215,8 @@ func (rh *RepoHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 		utils.Respond(w, http.StatusOK, response)
 		return
 	}
-	response.RepoInfo = totalRepo.RepoInfo
 
+	response.RepoInfo = rh.Repositories
 	klog.V(3).Info("Get Chart repo is successfully done")
 	utils.Respond(w, http.StatusOK, response)
 }
@@ -409,4 +397,49 @@ func writeRepoList(repoList *schemas.RepositoryFile) error {
 // 		singleChartEntries[key] = oneChart
 // 	}
 // 	return singleChartEntries
+// }
+
+// func (rh *RepoHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
+// 	utils.SetResponseHeader(w)
+
+// 	// Read repositoryConfig File which contains repo Info list
+// 	repoList, _ := utils.ReadRepoList()
+// 	if repoList == nil {
+// 		utils.Respond(w, http.StatusOK, &schemas.Error{
+// 			Error:       "No helm repository is added",
+// 			Description: "you need to add at least one helm repository",
+// 		})
+// 		return
+// 	}
+
+// 	// Set Response with repo Info list
+// 	totalRepo := &schemas.RepoResponse{}
+// 	response := &schemas.RepoResponse{}
+
+// 	// set last updated time
+// 	for _, repo := range repoList.Repositories {
+// 		r_index, err := utils.ReadRepoIndex(repo.Name)
+// 		if err != nil {
+// 			klog.V(1).Info(err, "failed to read index file")
+// 		}
+// 		repo.LastUpdated = r_index.Generated
+// 		totalRepo.RepoInfo = append(totalRepo.RepoInfo, repo)
+// 	}
+
+// 	vars := mux.Vars(r)
+// 	reqRepoName, exist := vars["repo-name"]
+// 	if exist {
+// 		for _, repo := range totalRepo.RepoInfo {
+// 			if repo.Name == reqRepoName {
+// 				response.RepoInfo = append(response.RepoInfo, repo)
+// 			}
+// 		}
+// 		klog.V(3).Info("Get Chart repo is successfully done")
+// 		utils.Respond(w, http.StatusOK, response)
+// 		return
+// 	}
+// 	response.RepoInfo = totalRepo.RepoInfo
+
+// 	klog.V(3).Info("Get Chart repo is successfully done")
+// 	utils.Respond(w, http.StatusOK, response)
 // }
