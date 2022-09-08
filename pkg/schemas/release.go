@@ -48,5 +48,5 @@ type Release struct {
 	Labels map[string]string `json:"-"`
 
 	// 직접 추가한 field
-	Objects map[string]string `json:"objects,omitempty"`
+	Objects map[string][]string `json:"objects,omitempty"`
 }
