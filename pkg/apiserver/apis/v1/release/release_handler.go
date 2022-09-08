@@ -430,13 +430,15 @@ func setObjectsInfo(rel *schemas.Release) error {
 		temp = append(temp, splits2...)
 	}
 
-	objMap := make(map[string]string)
+	objMap := make(map[string][]string)
 	for _, t := range temp {
 		if strings.Contains(t, "apiVersion") {
 			trans := []byte(strings.TrimSpace(t))
 			raw, _ := yaml.YAMLToJSON(trans)
 			json.Unmarshal(raw, &object)
-			objMap[object["kind"].(string)] = object["metadata"].(map[string]interface{})["name"].(string)
+			objKind := object["kind"].(string)
+			objName := object["metadata"].(map[string]interface{})["name"].(string)
+			objMap[objKind] = append(objMap[objKind], objName)
 		}
 	}
 
