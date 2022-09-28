@@ -44,7 +44,7 @@ type server struct {
 // +kubebuilder:rbac:groups="",resources=configmaps,namespace=kube-system,resourceNames=extension-apiserver-authentication,verbs=get;list;watch
 
 // New is a constructor of server
-func New(cli client.Client, cfg *rest.Config, hcm *hclient.HelmClientManager, cache cache.Cache) (Server, error) {
+func New(cli client.Client, cfg *rest.Config, hcm *hclient.HelmClientManager, cache cache.Cache, defaultRepo bool) (Server, error) {
 	var err error
 	srv := &server{}
 	srv.wrapper = wrapper.New("/", nil, srv.rootHandler)
@@ -64,7 +64,7 @@ func New(cli client.Client, cfg *rest.Config, hcm *hclient.HelmClientManager, ca
 	}
 
 	// Set apisHandler
-	apisHandler, err := apis.NewHandler(srv.wrapper, srv.client, srv.hcm, srv.authCli, srv.ChartCache)
+	apisHandler, err := apis.NewHandler(srv.wrapper, srv.client, srv.hcm, srv.authCli, srv.ChartCache, defaultRepo)
 	if err != nil {
 		return nil, err
 	}

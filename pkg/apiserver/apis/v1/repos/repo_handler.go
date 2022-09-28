@@ -62,7 +62,9 @@ func (rh *RepoHandler) UpdateChartCache() {
 	klog.V(3).Info("Updating ChartCache is done")
 }
 
-// func (rh *RepoHandler) AddDefaultRepo() {
+func (rh *RepoHandler) addDefaultRepo() {
+}
+
 // 	rh.log.Info("Add default Chart repo")
 
 // Read repositoryConfig File which contains repo Info list
