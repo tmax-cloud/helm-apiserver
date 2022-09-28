@@ -35,8 +35,12 @@ type RepoCache struct {
 	Repositories []schemas.Repository
 }
 
-func NewHandler(parent wrapper.RouterWrapper, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, chartCache *chart.ChartCache) (apiserver.APIHandler, error) {
+func NewHandler(parent wrapper.RouterWrapper, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, chartCache *chart.ChartCache, defaultRepo bool) (apiserver.APIHandler, error) {
 	repoHandler := &RepoHandler{hcm: hcm, ChartCache: chartCache, RepoCache: nil}
+
+	if defaultRepo {
+		repoHandler.addDefaultRepo()
+	}
 	repoHandler.updateRepoCache()
 	repoHandler.initRepoCache()
 
@@ -80,6 +84,10 @@ func (rh *RepoHandler) updateRepoCache() {
 
 // 재기동시 레포 사라지는 버그 방지
 func (rh *RepoHandler) initRepoCache() {
+	if len(rh.Repositories) == 0 {
+		return
+	}
+
 	chartRepo := repo.Entry{}
 	for _, re := range rh.Repositories {
 		chartRepo.Name = re.Name

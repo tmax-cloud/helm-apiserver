@@ -30,6 +30,7 @@ var (
 	AddToScheme        = SchemeBuilder.AddToScheme
 	SchemeGroupVersion = schema.GroupVersion{Group: APIGroup, Version: APIVersion}
 	LogLevel           string
+	DefaultRepo        bool
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {
@@ -39,6 +40,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 
 func init() {
 	flag.StringVar(&LogLevel, "log-level", "INFO", "Log Level; TRACE, DEBUG, INFO, WARN, ERROR, FATAL")
+	flag.BoolVar(&DefaultRepo, "add-default-repo", false, "add-default-repo: true, false")
 	flag.Parse()
 	klog.Infoln("LOG_LEVEL = " + LogLevel)
 
@@ -84,7 +86,7 @@ func main() {
 	hcm := hclient.NewHelmClientManager()
 
 	// Start API server
-	apiServer, err := apiserver.New(mgr.GetClient(), mgr.GetConfig(), hcm, mgr.GetCache())
+	apiServer, err := apiserver.New(mgr.GetClient(), mgr.GetConfig(), hcm, mgr.GetCache(), DefaultRepo)
 	if err != nil {
 		klog.V(1).Info(err, "unable to create api server")
 		os.Exit(1)

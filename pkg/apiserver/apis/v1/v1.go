@@ -31,7 +31,7 @@ type handler struct {
 }
 
 // NewHandler instantiates a new v1 api handler
-func NewHandlerForAggr(parent wrapper.RouterWrapper, cli client.Client, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, chartCache *chart.ChartCache) (apiserver.APIHandler, error) {
+func NewHandlerForAggr(parent wrapper.RouterWrapper, cli client.Client, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, chartCache *chart.ChartCache, defaultRepo bool) (apiserver.APIHandler, error) {
 	handler := &handler{}
 
 	// /v1
@@ -41,7 +41,7 @@ func NewHandlerForAggr(parent wrapper.RouterWrapper, cli client.Client, hcm *hcl
 	}
 
 	// /v1/repos/<repo>
-	repoHandler, err := repos.NewHandler(versionWrapper, hcm, authCli, chartCache)
+	repoHandler, err := repos.NewHandler(versionWrapper, hcm, authCli, chartCache, defaultRepo)
 	if err != nil {
 		return nil, err
 	}
