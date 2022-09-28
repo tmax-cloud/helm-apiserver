@@ -7,7 +7,7 @@ HS_IMG   = $(REGISTRY)/helm-apiserver:$(VERSION)
 
 # Test apis func
 test:
-	go test ./pkg/apis
+	go test ./pkg/apiserver/apis/v1/...
 
 # Build the docker image
 build:
