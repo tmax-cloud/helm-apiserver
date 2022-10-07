@@ -194,7 +194,7 @@ func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 
 func (rh *RepoHandler) GetChartRepos(w http.ResponseWriter, r *http.Request) {
 	utils.SetResponseHeader(w)
-	if len(rh.Repositories) == 0 {
+	if rh.RepoCache == nil || len(rh.Repositories) == 0 {
 		utils.Respond(w, http.StatusOK, &schemas.Error{
 			Error:       "No helm repository is added",
 			Description: "you need to add at least one helm repository",
