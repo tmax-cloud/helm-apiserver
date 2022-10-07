@@ -36,7 +36,7 @@ jobs:
           docker login -u=tmaxcloudck -p=${{ secrets.DOCKER_HUB_PASSWORD }}
           REPO=tmaxcloudck/helm-apiserver
           IMG=${REPO}:${GITHUB_REF#refs/tags/}
-          docker build . -t ${IMG}
+          docker build . -t ${IMG} -f build/Dockerfile
           docker tag ${IMG} ${REPO}:latest
           docker push ${IMG}
           docker push ${REPO}:latest
