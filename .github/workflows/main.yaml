@@ -28,12 +28,14 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.16.x
       - name: build and push 
         run: |
           docker login -u=tmaxcloudck -p=${{ secrets.DOCKER_HUB_PASSWORD }}
           REPO=tmaxcloudck/helm-apiserver
           IMG=${REPO}:${GITHUB_REF#refs/tags/}
-          cd ./build
           docker build . -t ${IMG}
           docker tag ${IMG} ${REPO}:latest
           docker push ${IMG}
