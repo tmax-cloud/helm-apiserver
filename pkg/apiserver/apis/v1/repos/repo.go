@@ -38,7 +38,7 @@ type RepoCache struct {
 func NewHandler(parent wrapper.RouterWrapper, hcm *hclient.HelmClientManager, authCli authorization.AuthorizationV1Interface, chartCache *chart.ChartCache, defaultRepo bool) (apiserver.APIHandler, error) {
 	repoHandler := &RepoHandler{hcm: hcm, ChartCache: chartCache, RepoCache: nil}
 
-	if defaultRepo {
+	if defaultRepo { // [TO-DO] default repo 부분 작성 필요
 		repoHandler.addDefaultRepo()
 	}
 	repoHandler.updateRepoCache()
@@ -84,7 +84,7 @@ func (rh *RepoHandler) updateRepoCache() {
 
 // 재기동시 레포 사라지는 버그 방지
 func (rh *RepoHandler) initRepoCache() {
-	if len(rh.Repositories) == 0 {
+	if rh.RepoCache == nil || len(rh.Repositories) == 0 {
 		return
 	}
 
