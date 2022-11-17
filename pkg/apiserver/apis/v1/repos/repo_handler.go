@@ -36,19 +36,19 @@ func (rh *RepoHandler) repoHandler(w http.ResponseWriter, req *http.Request) {
 		}
 		if req.Method == http.MethodPut {
 			rh.UpdateChartRepo(w, req)
-			rh.UpdateChartCache()
-			rh.updateRepoCache()
+			// rh.UpdateChartCache()
+			// rh.updateRepoCache()
 		}
 		if req.Method == http.MethodDelete {
 			rh.DeleteChartRepo(w, req)
-			rh.UpdateChartCache()
-			rh.updateRepoCache()
+			// rh.UpdateChartCache()
+			// rh.updateRepoCache()
 		}
 	case !rel:
 		if req.Method == http.MethodPost {
 			rh.AddChartRepo(w, req)
-			rh.UpdateChartCache()
-			rh.updateRepoCache()
+			// rh.UpdateChartCache()
+			// rh.updateRepoCache()
 		}
 		if req.Method == http.MethodGet {
 			rh.GetChartRepos(w, req)
@@ -108,17 +108,11 @@ func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 	// Read repositoryConfig File which contains repo Info list
 	repoList, _ := utils.ReadRepoList()
 	if repoList != nil {
-		var repoNames []string
-		// store repo names into repoNames slice
+		// 이름이 같거나 url이 같은 repo추가 방지
 		for _, repoInfo := range repoList.Repositories {
-			repoNames = append(repoNames, repoInfo.Name)
-		}
-
-		// Check if req repoName is already exist
-		for _, repoName := range repoNames {
-			if req.Name == repoName {
+			if req.Name == repoInfo.Name || req.RepoURL == repoInfo.Url {
 				utils.Respond(w, http.StatusBadRequest, &schemas.Error{
-					Description: req.Name + " name repository is already exist",
+					Description: req.Name + " name or " + req.RepoURL + " url  repository is already exist",
 				})
 				return
 			}
@@ -153,42 +147,23 @@ func (rh *RepoHandler) AddChartRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read repositoryConfig File which contains repo Info list
-	afterRepoList, err := utils.ReadRepoList()
-	if err != nil {
-		utils.Respond(w, http.StatusBadRequest, &schemas.Error{
-			Error:       err.Error(),
-			Description: "Error occurs while reading repository list file",
-		})
-		return
-	}
-
-	sync := true
-	for _, repo := range afterRepoList.Repositories {
-		if repo.Name == req.Name {
-			sync = false
-		}
-	}
-
-	// -index.yaml 파일과 .helmrepo 파일 sync
-	// -index.yaml 파일은 생기는데 .helmrepo 파일 update 안되는 버그 있음
-	if sync {
-		afterRepoList.Repositories = append(afterRepoList.Repositories, schemas.Repository{
+	if repoList != nil {
+		repoList.Repositories = append(repoList.Repositories, schemas.Repository{
 			Name: req.Name,
 			Url:  req.RepoURL,
 		})
-
-		if err := writeRepoList(afterRepoList); err != nil {
+		if err := writeRepoList(repoList); err != nil {
 			utils.Respond(w, http.StatusBadRequest, &schemas.Error{
 				Error:       err.Error(),
 				Description: "Error occurs while sync repo list file",
 			})
 			return
 		}
-
 	}
 
 	klog.V(3).Info(req.Name + " repo is successfully added")
+	rh.updateRepoCache()
+	rh.UpdateChartCache()
 	utils.Respond(w, http.StatusOK, req.Name+" repo is successfully added")
 }
 
@@ -239,9 +214,8 @@ func (rh *RepoHandler) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Replace repo list without requested repo
 	newRepoList := &schemas.RepositoryFile{}
-	for _, repo := range repoList.Repositories {
+	for _, repo := range repoList.Repositories { // check, 죽었다 떴을때 memory 날라가서 안될듯
 		if repo.Name != reqRepoName {
 			newRepoList.Repositories = append(newRepoList.Repositories, repo)
 		}
@@ -276,6 +250,8 @@ func (rh *RepoHandler) DeleteChartRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	klog.V(3).Info(reqRepoName + " is successfully removed")
+	rh.updateRepoCache()
+	rh.UpdateChartCache()
 	utils.Respond(w, http.StatusOK, reqRepoName+" repo is successfully removed")
 }
 
@@ -315,7 +291,8 @@ func (rh *RepoHandler) UpdateChartRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	klog.V(3).Info(chartRepo.Name + " repo is successfully updated")
 
-	// ch.UpdateChartHandler()
+	rh.updateRepoCache()
+	rh.UpdateChartCache()
 	utils.Respond(w, http.StatusOK, "repo update is successfully done")
 }
 

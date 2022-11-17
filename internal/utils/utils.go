@@ -103,8 +103,10 @@ func GetIndex() *schemas.IndexFile {
 
 	repoInfos := make(map[string]string)
 	// store repo names
-	for _, repoInfo := range repoList.Repositories {
-		repoInfos[repoInfo.Name] = repoInfo.Url
+	if len(repoList.Repositories) != 0 {
+		for _, repoInfo := range repoList.Repositories {
+			repoInfos[repoInfo.Name] = repoInfo.Url
+		}
 	}
 
 	index := &schemas.IndexFile{}
@@ -147,7 +149,7 @@ func GetSingleChart(index *schemas.IndexFile) map[string]schemas.ChartVersions {
 
 func ReadRepoIndex(repoName string) (index *schemas.IndexFile, err error) {
 	if _, err := os.Stat(repositoryCache + "/" + repoName + indexFileSuffix); errors.Is(err, os.ErrNotExist) {
-		klog.Info(repoName + " .-index.yaml file is not exist")
+		klog.Info(repoName + "-index.yaml file is not exist")
 		return nil, err
 	}
 
