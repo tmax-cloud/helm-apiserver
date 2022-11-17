@@ -420,10 +420,11 @@ func (sh *ReleaseHandler) UnInstallRelease(w http.ResponseWriter, r *http.Reques
 // Response에 생성된 object kind 및 name 추가 하기 위함
 func setObjectsInfo(rel *schemas.Release) error {
 	var temp []string
-	// var objects []*runtime.RawExtension // 일부 releases에서 unstr로 변경 안되는 버그
+	// var objects []*runtime.RawExtension // 일부 releases에서 unstr로 변경 안되는 버그있어서 아래방법으로 대체
 	var object map[string]interface{}
 
 	splits1 := strings.Split(rel.Manifest, "---")
+	klog.Info(rel.Manifest)
 
 	for _, spl := range splits1 {
 		splits2 := strings.Split(spl, ".yaml")
@@ -432,7 +433,7 @@ func setObjectsInfo(rel *schemas.Release) error {
 
 	objMap := make(map[string][]string)
 	for _, t := range temp {
-		if strings.Contains(t, "apiVersion") {
+		if strings.Contains(t, "apiVersion") && !strings.Contains(t, "#apiVersion") && !strings.Contains(t, "# apiVersion") {
 			trans := []byte(strings.TrimSpace(t))
 			raw, _ := yaml.YAMLToJSON(trans)
 			json.Unmarshal(raw, &object)
