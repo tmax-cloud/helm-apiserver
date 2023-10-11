@@ -28,9 +28,6 @@ type Server interface {
 	Start()
 }
 
-type Server2 interface {
-	Start()
-}
 // server is an api server
 type server struct {
 	wrapper     wrapper.RouterWrapper
